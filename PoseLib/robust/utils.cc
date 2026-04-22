@@ -222,9 +222,10 @@ double compute_sampson_msac_score_bearing(const CameraPose &pose, const std::vec
         if (r2 < sq_threshold) {
             bool cheirality_ok = true;
             if (check_cheirality_flag) {
-                // check_cheirality(pose, b1, b2, min_depth) operates directly on unit
-                // bearing vectors. For spherical scenes with back-hemisphere features
-                // the caller should pass check_cheirality_flag=false.
+                // check_cheirality(pose, b1, b2, min_depth) operates directly on the
+                // bearing rays by testing positive triangulated depths (lambdas). It
+                // is therefore applicable to general bearing data, including spherical
+                // scenes, and does not depend on the sign of camera-space z.
                 cheirality_ok = check_cheirality(pose, b1, b2, 0.01);
             }
             if (cheirality_ok) {
