@@ -33,9 +33,9 @@
 
 namespace poselib {
 
-RansacStats estimate_absolute_pose_bearings(const std::vector<Point3D> &bearings,
-                                             const std::vector<Point3D> &points3D, const AbsolutePoseOptions &opt,
-                                             CameraPose *pose, std::vector<char> *inliers) {
+RansacStats estimate_absolute_pose_bearings(const std::vector<Point3D> &bearings, const std::vector<Point3D> &points3D,
+                                            const AbsolutePoseOptions &opt, CameraPose *pose,
+                                            std::vector<char> *inliers) {
     // Bearings are already in calibrated (bearing) coordinates, so there is no
     // pixel-to-bearing rescaling to do. opt.max_error is interpreted directly
     // as a chord-distance threshold on the unit sphere.
@@ -272,8 +272,8 @@ RansacStats estimate_absolute_pose_pnpl(const std::vector<Point2D> &points2D, co
 }
 
 RansacStats estimate_relative_pose_bearings(const std::vector<Point3D> &bearings_1,
-                                             const std::vector<Point3D> &bearings_2, const RelativePoseOptions &opt,
-                                             CameraPose *pose, std::vector<char> *inliers, bool check_cheirality) {
+                                            const std::vector<Point3D> &bearings_2, const RelativePoseOptions &opt,
+                                            CameraPose *pose, std::vector<char> *inliers, bool check_cheirality) {
     // Bearings are already calibrated. opt.max_error is interpreted directly
     // as a Sampson threshold in bearing-normalized units.
     RansacStats stats = ransac_relpose_bearing(bearings_1, bearings_2, opt, pose, inliers, check_cheirality);

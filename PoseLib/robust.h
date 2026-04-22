@@ -55,9 +55,9 @@ RansacStats estimate_absolute_pose(const std::vector<Point2D> &points2D, const s
 // relevant camera model, then use chord = 2*sin(angle/2). For pinhole bearings
 // this path is algebraically equivalent to estimate_absolute_pose(Point2D, ...)
 // when bearings come from normalize((X/Z, Y/Z, 1)).
-RansacStats estimate_absolute_pose_bearings(const std::vector<Point3D> &bearings,
-                                            const std::vector<Point3D> &points3D, const AbsolutePoseOptions &opt,
-                                            CameraPose *pose, std::vector<char> *inliers);
+RansacStats estimate_absolute_pose_bearings(const std::vector<Point3D> &bearings, const std::vector<Point3D> &points3D,
+                                            const AbsolutePoseOptions &opt, CameraPose *pose,
+                                            std::vector<char> *inliers);
 
 // Estimates generalized absolute pose using LO-RANSAC followed by non-linear refinement
 // Threshold for reprojection error is set by RansacOptions.max_reproj_error

@@ -41,8 +41,7 @@ RansacStats ransac_pnp(const std::vector<Point2D> &x, const std::vector<Point3D>
 
 // Absolute pose estimation with 3D unit bearing vectors (any central camera model)
 RansacStats ransac_pnp_bearing(const std::vector<Point3D> &bearings, const std::vector<Point3D> &X,
-                               const AbsolutePoseOptions &opt, CameraPose *best_model,
-                               std::vector<char> *best_inliers);
+                               const AbsolutePoseOptions &opt, CameraPose *best_model, std::vector<char> *best_inliers);
 
 // Points need to be centered. Returns a SIMPLE_PINHOLE camera with principal point (0,0)
 RansacStats ransac_pnpf(const std::vector<Point2D> &x, const std::vector<Point3D> &X, const AbsolutePoseOptions &opt,

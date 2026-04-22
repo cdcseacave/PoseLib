@@ -113,8 +113,8 @@ void BearingRelativePoseEstimator::refine_model(CameraPose *pose) const {
 
     // Find approximate inliers and bundle over these with a truncated loss
     std::vector<char> inliers;
-    int num_inl = get_inliers_rel_bearing(*pose, b1, b2, 5 * (opt.max_error * opt.max_error), &inliers,
-                                          enable_cheirality_check);
+    int num_inl =
+        get_inliers_rel_bearing(*pose, b1, b2, 5 * (opt.max_error * opt.max_error), &inliers, enable_cheirality_check);
     if (num_inl <= 5) {
         return;
     }

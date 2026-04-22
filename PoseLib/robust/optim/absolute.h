@@ -298,8 +298,7 @@ class BearingAbsolutePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
 
             // d(b_pred)/dZ = (I - b_pred * b_pred^T) / |Z|  (tangent-space projector
             // at b_pred, scaled by 1/|Z|; rank 2).
-            const Eigen::Matrix3d Jproj =
-                (Eigen::Matrix3d::Identity() - b_pred * b_pred.transpose()) / norm_Z;
+            const Eigen::Matrix3d Jproj = (Eigen::Matrix3d::Identity() - b_pred * b_pred.transpose()) / norm_Z;
 
             // The pose parameterization (see step()) is:
             //   R_new = R * exp([dw]_x)         (lie-rep post-mult for rotation)

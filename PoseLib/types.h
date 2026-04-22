@@ -132,9 +132,7 @@ struct AbsolutePoseOptions {
     //   |b_obs - b_pred|^2 = 2 - 2*cos(angle)
     // so the inlier threshold in those units is chord = 2*sin(angle/2).
     // For small angles chord ≈ angle (the two agree to ~1e-4 at 5°).
-    inline void SetMaxErrorFromAngle(double angle_rad) {
-        max_error = 2.0 * std::sin(0.5 * angle_rad);
-    }
+    inline void SetMaxErrorFromAngle(double angle_rad) { max_error = 2.0 * std::sin(0.5 * angle_rad); }
 };
 
 struct RelativePoseOptions {
@@ -161,9 +159,7 @@ struct RelativePoseOptions {
     // helper just stores the angle directly. The 2D Sampson and the bearing-
     // vector Sampson are consistent on this unit because for pinhole bearings
     // (z=1) the formulas reduce to each other exactly.
-    inline void SetMaxErrorFromAngle(double angle_rad) {
-        max_error = angle_rad;
-    }
+    inline void SetMaxErrorFromAngle(double angle_rad) { max_error = angle_rad; }
 };
 
 struct HybridPoseOptions {
