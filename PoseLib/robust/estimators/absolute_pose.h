@@ -65,6 +65,53 @@ class AbsolutePoseEstimator {
     std::vector<size_t> sample;
 };
 
+// Absolute pose estimator for any central camera model (pinhole, spherical,
+// fisheye, ...) using 3D unit bearing vectors instead of 2D normalized pixels.
+// For spherical cameras this preserves hemisphere information (sign(z)) that
+// the 2D Point2D form loses; for pinhole cameras it is algebraically
+// equivalent to AbsolutePoseEstimator when bearings come from
+// Camera::UnprojectNormalized (i.e., normalize((X/Z, Y/Z, 1))).
+//
+// Scoring is the squared chord distance between observed and predicted
+// unit bearings (no cheirality check — works for the full sphere). The
+// threshold opt.max_error is interpreted in chord-distance units, not pixels:
+// callers should convert a pixel-space threshold via
+//   angle = camera.PixelErrorToAngular(pixel_threshold);
+//   chord = 2 * sin(angle / 2);
+//
+// Uses the existing bearing-native p3p solver internally, so the minimal
+// sampling machinery is identical to AbsolutePoseEstimator — only the
+// input conversion shim and the scoring residual change.
+class BearingAbsolutePoseEstimator {
+  public:
+    BearingAbsolutePoseEstimator(const AbsolutePoseOptions &opt, const std::vector<Point3D> &bearings,
+                                 const std::vector<Point3D> &points3D)
+        : num_data(bearings.size()), opt(opt), b(bearings), X(points3D),
+          sampler(num_data, sample_sz, opt.ransac) {
+        xs.resize(sample_sz);
+        Xs.resize(sample_sz);
+        sample.resize(sample_sz);
+    }
+
+    void generate_models(std::vector<CameraPose> *models);
+    double score_model(const CameraPose &pose, size_t *inlier_count) const;
+    void refine_model(CameraPose *pose) const;
+
+    const size_t sample_sz = 3;
+    const size_t num_data;
+
+  private:
+    const AbsolutePoseOptions &opt;
+    const std::vector<Point3D> &b;
+    const std::vector<Point3D> &X;
+
+    RandomSampler sampler;
+
+    // pre-allocated vectors for sampling
+    std::vector<Point3D> xs, Xs;
+    std::vector<size_t> sample;
+};
+
 // This is a variant of the AbsolutePoseEstimator that estimates the focal length
 // as well, using the SIMPLE_PINHOLE model.
 // Assumes principal point is at (0, 0)
