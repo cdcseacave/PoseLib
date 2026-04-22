@@ -65,8 +65,9 @@ double compute_sampson_msac_score(const Eigen::Matrix3d &F, const std::vector<Po
 // No cheirality check — works for full-sphere cameras.
 //
 // sq_threshold is the squared chord-distance threshold in unit-bearing coordinates.
-// Callers convert from a pixel threshold via the camera's PixelErrorToAngular helper
-// (yielding an angle in radians), then via 2*sin(angle/2) for the chord distance.
+// Callers should convert any pixel-domain threshold to an angular threshold in radians
+// using their camera model/calibration, then convert that angle via 2*sin(angle/2)
+// to obtain the corresponding chord-distance threshold.
 double compute_msac_score_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings,
                                   const std::vector<Point3D> &X, double sq_threshold, size_t *inlier_count);
 
