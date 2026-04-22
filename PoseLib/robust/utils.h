@@ -76,8 +76,8 @@ double compute_msac_score_bearing(const CameraPose &pose, const std::vector<Poin
 // (b.x, b.y, b.z); for pinhole bearings this reduces to compute_sampson_msac_score.
 //
 // Cheirality is enforced via the existing check_cheirality(pose, b1, b2) overload,
-// which operates directly on unit bearings. For spherical cameras the caller should
-// pass tangent_sampson-style thresholds; chord-distance thresholds work for both.
+// which operates directly on unit bearings. sq_threshold is in squared Sampson-error
+// units for this residual (approximately radians^2 in the small-error limit).
 double compute_sampson_msac_score_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings1,
                                           const std::vector<Point3D> &bearings2, double sq_threshold,
                                           size_t *inlier_count, bool check_cheirality_flag = true);
