@@ -48,6 +48,16 @@ BundleStats bundle_adjust(const std::vector<Point2D> &x, const std::vector<Point
                           const BundleOptions &opt = BundleOptions(),
                           const std::vector<double> &weights = std::vector<double>());
 
+// Absolute pose refinement for any central camera model (pinhole, spherical,
+// fisheye, ...) using 3D unit bearing vectors instead of 2D normalized pixels.
+// Minimizes the 3D residual r = normalize(R*X + t) - b_obs on the unit sphere.
+// No cheirality check — works for the full sphere (back-hemisphere points are
+// valid). For pinhole bearings this is algebraically equivalent to the 2D
+// bundle_adjust above.
+BundleStats bundle_adjust_bearing(const std::vector<Point3D> &bearings, const std::vector<Point3D> &X, CameraPose *pose,
+                                  const BundleOptions &opt = BundleOptions(),
+                                  const std::vector<double> &weights = std::vector<double>());
+
 // Point+Line refinement, assumes calibrated pinhole camera
 BundleStats bundle_adjust(const std::vector<Point2D> &points2D, const std::vector<Point3D> &points3D,
                           const std::vector<Line2D> &lines2D, const std::vector<Line3D> &lines3D, CameraPose *pose,
@@ -84,6 +94,15 @@ generalized_bundle_adjust(const std::vector<std::vector<Point2D>> &x, const std:
 BundleStats refine_relpose(const std::vector<Point2D> &x1, const std::vector<Point2D> &x2, CameraPose *pose,
                            const BundleOptions &opt = BundleOptions(),
                            const std::vector<double> &weights = std::vector<double>());
+
+// Relative pose refinement for any central camera model using 3D unit bearing vectors.
+// Minimizes the (x,y)-subspace Sampson error — for pinhole bearings b=(x,y,1)/|(x,y,1)|
+// this reduces algebraically to refine_relpose(Point2D, Point2D, ...) above; for spherical
+// bearings with b.z != 1 it generalizes naturally. No cheirality check — works for the
+// full sphere.
+BundleStats refine_relpose_bearing(const std::vector<Point3D> &bearings_1, const std::vector<Point3D> &bearings_2,
+                                   CameraPose *pose, const BundleOptions &opt = BundleOptions(),
+                                   const std::vector<double> &weights = std::vector<double>());
 
 // Relative pose refinement. Minimizes Tangent Sampson error error.
 BundleStats refine_relpose(const std::vector<Point2D> &x1, const std::vector<Point2D> &x2, ImagePair *pair,

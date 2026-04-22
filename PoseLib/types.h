@@ -31,6 +31,7 @@
 #include "alignment.h"
 
 #include <Eigen/Dense>
+#include <cmath>
 #include <limits>
 #include <vector>
 
@@ -124,6 +125,16 @@ struct AbsolutePoseOptions {
     // and not on the actual image size.
     // Setting to 0 (or negative) disables checking.
     double min_fov = 5.0; // circa 500mm lens 35mm-equivalent
+
+    // Set max_error from an angular threshold in radians, as used by the
+    // bearing-vector pose estimator (estimate_absolute_pose_bearings).
+    // The bearing estimator scores with the squared chord distance
+    //   |b_obs - b_pred|^2 = 2 - 2*cos(angle)
+    // so the inlier threshold in those units is chord = 2*sin(angle/2).
+    // For small angles chord ≈ angle (the two agree to ~1e-4 at 5°).
+    inline void SetMaxErrorFromAngle(double angle_rad) {
+        max_error = 2.0 * std::sin(0.5 * angle_rad);
+    }
 };
 
 struct RelativePoseOptions {
@@ -142,6 +153,17 @@ struct RelativePoseOptions {
     // Whether we should use real focal length checking: https://arxiv.org/abs/2311.16304
     // Assumes that principal points of both cameras are at origin.
     bool real_focal_check = false;
+
+    // Set max_error from an angular threshold in radians. The relative-pose
+    // estimators score with a Sampson error whose unit is the perpendicular
+    // distance to the epipolar line/great-circle; in the small-error limit
+    // this equals the angular distance (radians) on the unit sphere, so the
+    // helper just stores the angle directly. The 2D Sampson and the bearing-
+    // vector Sampson are consistent on this unit because for pinhole bearings
+    // (z=1) the formulas reduce to each other exactly.
+    inline void SetMaxErrorFromAngle(double angle_rad) {
+        max_error = angle_rad;
+    }
 };
 
 struct HybridPoseOptions {

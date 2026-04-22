@@ -154,6 +154,148 @@ double compute_msac_score(const CameraPose &pose, double focal, const std::vecto
     return score;
 }
 
+// Bearing-vector MSAC score for absolute pose.
+// Residual is the squared chord distance between the observed unit bearing and
+// the predicted bearing normalize(R*X + t). No cheirality check — spherical
+// cameras observe the full sphere, so back-hemisphere points are valid.
+double compute_msac_score_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings,
+                                  const std::vector<Point3D> &X, double sq_threshold, size_t *inlier_count) {
+    *inlier_count = 0;
+    double score = 0.0;
+    const Eigen::Matrix3d R = pose.R();
+    const Eigen::Vector3d &t = pose.t;
+
+    for (size_t k = 0; k < bearings.size(); ++k) {
+        // Predicted bearing direction in camera space.
+        const Eigen::Vector3d Xcam = R * X[k] + t;
+        const double norm_Xcam = Xcam.norm();
+        if (norm_Xcam < 1e-12) {
+            // Degenerate: 3D point coincides with the camera center.
+            score += sq_threshold;
+            continue;
+        }
+        const Eigen::Vector3d pred = Xcam / norm_Xcam;
+        // bearings[k] is assumed to be a (near-)unit vector. Chord^2 = |b_obs - pred|^2.
+        const Eigen::Vector3d d = bearings[k] - pred;
+        const double r_sq = d.squaredNorm();
+        if (r_sq < sq_threshold) {
+            (*inlier_count)++;
+            score += r_sq;
+        }
+    }
+    score += (bearings.size() - *inlier_count) * sq_threshold;
+    return score;
+}
+
+// Bearing-vector MSAC score for relative pose using Sampson-on-the-sphere error.
+// Algebraically identical to the 2D Sampson formula with (x.x, x.y, 1) replaced by
+// the full 3D bearing. For pinhole bearings (b = (X/Z, Y/Z, 1) normalized) this
+// reduces to compute_sampson_msac_score.
+double compute_sampson_msac_score_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings1,
+                                          const std::vector<Point3D> &bearings2, double sq_threshold,
+                                          size_t *inlier_count, bool check_cheirality_flag) {
+    *inlier_count = 0;
+    Eigen::Matrix3d E;
+    essential_from_motion(pose, &E);
+
+    double score = 0.0;
+    for (size_t k = 0; k < bearings1.size(); ++k) {
+        const Eigen::Vector3d &b1 = bearings1[k];
+        const Eigen::Vector3d &b2 = bearings2[k];
+
+        const Eigen::Vector3d Eb1 = E * b1;
+        const Eigen::Vector3d Etb2 = E.transpose() * b2;
+
+        const double C = b2.dot(Eb1);
+        // Sampson denominator: use the (x, y) components only, matching the 2D path's
+        // pinhole reduction. For pinhole b.z == 1 so the Eb1(2) and Etb2(2) terms are
+        // exactly what the 2D formula drops.
+        const double Cx = Eb1(0) * Eb1(0) + Eb1(1) * Eb1(1);
+        const double Cy = Etb2(0) * Etb2(0) + Etb2(1) * Etb2(1);
+        const double denom = Cx + Cy;
+        if (denom < 1e-12) {
+            score += sq_threshold;
+            continue;
+        }
+        const double r2 = C * C / denom;
+
+        if (r2 < sq_threshold) {
+            bool cheirality_ok = true;
+            if (check_cheirality_flag) {
+                // check_cheirality(pose, b1, b2, min_depth) operates directly on unit
+                // bearing vectors. For spherical scenes with back-hemisphere features
+                // the caller should pass check_cheirality_flag=false.
+                cheirality_ok = check_cheirality(pose, b1, b2, 0.01);
+            }
+            if (cheirality_ok) {
+                (*inlier_count)++;
+                score += r2;
+            } else {
+                score += sq_threshold;
+            }
+        } else {
+            score += sq_threshold;
+        }
+    }
+    return score;
+}
+
+// Bearing-vector inlier selection for absolute pose.
+void get_inliers_abs_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings,
+                             const std::vector<Point3D> &X, double sq_threshold, std::vector<char> *inliers) {
+    inliers->resize(bearings.size());
+    const Eigen::Matrix3d R = pose.R();
+    const Eigen::Vector3d &t = pose.t;
+
+    for (size_t k = 0; k < bearings.size(); ++k) {
+        const Eigen::Vector3d Z = R * X[k] + t;
+        const double norm_Z = Z.norm();
+        if (norm_Z < 1e-12) {
+            (*inliers)[k] = 0;
+            continue;
+        }
+        const Eigen::Vector3d pred = Z / norm_Z;
+        const double r_sq = (bearings[k] - pred).squaredNorm();
+        (*inliers)[k] = (r_sq < sq_threshold) ? 1 : 0;
+    }
+}
+
+// Bearing-vector inlier selection for relative pose (Sampson-on-the-sphere).
+int get_inliers_rel_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings1,
+                            const std::vector<Point3D> &bearings2, double sq_threshold, std::vector<char> *inliers,
+                            bool check_cheirality_flag) {
+    inliers->resize(bearings1.size());
+    Eigen::Matrix3d E;
+    essential_from_motion(pose, &E);
+
+    int inlier_count = 0;
+    for (size_t k = 0; k < bearings1.size(); ++k) {
+        const Eigen::Vector3d &b1 = bearings1[k];
+        const Eigen::Vector3d &b2 = bearings2[k];
+
+        const Eigen::Vector3d Eb1 = E * b1;
+        const Eigen::Vector3d Etb2 = E.transpose() * b2;
+
+        const double C = b2.dot(Eb1);
+        const double Cx = Eb1(0) * Eb1(0) + Eb1(1) * Eb1(1);
+        const double Cy = Etb2(0) * Etb2(0) + Etb2(1) * Etb2(1);
+        const double denom = Cx + Cy;
+        if (denom < 1e-12) {
+            (*inliers)[k] = 0;
+            continue;
+        }
+        const double r2 = C * C / denom;
+        bool ok = (r2 < sq_threshold);
+        if (ok && check_cheirality_flag) {
+            ok = check_cheirality(pose, b1, b2, 0.01);
+        }
+        (*inliers)[k] = ok ? 1 : 0;
+        if (ok)
+            ++inlier_count;
+    }
+    return inlier_count;
+}
+
 // Returns MSAC score of the Sampson error (checks cheirality of points as well)
 double compute_sampson_msac_score(const CameraPose &pose, const std::vector<Point2D> &x1,
                                   const std::vector<Point2D> &x2, double sq_threshold, size_t *inlier_count) {

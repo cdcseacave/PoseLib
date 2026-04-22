@@ -54,6 +54,46 @@ double compute_sampson_msac_score(const CameraPose &pose, const std::vector<Poin
 double compute_sampson_msac_score(const Eigen::Matrix3d &F, const std::vector<Point2D> &x1,
                                   const std::vector<Point2D> &x2, double sq_threshold, size_t *inlier_count);
 
+// Bearing-vector variants for central camera models (pinhole, spherical, fisheye, ...).
+// The inputs are 3D unit (or near-unit) bearing vectors in camera space; for spherical
+// cameras these preserve hemisphere information (sign(z)) that the 2D Point2D form loses.
+// For pinhole bearings with z>0 these reduce algebraically to the 2D Point2D variants,
+// so routing pinhole data through this path is zero-regression.
+//
+// compute_msac_score_bearing (absolute pose): residual is the chord distance squared
+// between the observed unit bearing and the predicted bearing normalize(R*X + t).
+// No cheirality check — works for full-sphere cameras.
+//
+// sq_threshold is the squared chord-distance threshold in unit-bearing coordinates.
+// Callers convert from a pixel threshold via the camera's PixelErrorToAngular helper
+// (yielding an angle in radians), then via 2*sin(angle/2) for the chord distance.
+double compute_msac_score_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings,
+                                  const std::vector<Point3D> &X, double sq_threshold, size_t *inlier_count);
+
+// compute_sampson_msac_score_bearing (relative pose): Sampson-on-the-sphere.
+// Algebraically identical to the 2D Sampson formula with (x.x, x.y, 1) replaced by
+// (b.x, b.y, b.z); for pinhole bearings this reduces to compute_sampson_msac_score.
+//
+// Cheirality is enforced via the existing check_cheirality(pose, b1, b2) overload,
+// which operates directly on unit bearings. For spherical cameras the caller should
+// pass tangent_sampson-style thresholds; chord-distance thresholds work for both.
+double compute_sampson_msac_score_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings1,
+                                          const std::vector<Point3D> &bearings2, double sq_threshold,
+                                          size_t *inlier_count, bool check_cheirality_flag = true);
+
+// Bearing-vector inlier selection for absolute pose (chord-distance threshold,
+// no cheirality check — full-sphere). Threshold is sq_threshold in chord-distance
+// units.
+void get_inliers_abs_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings,
+                             const std::vector<Point3D> &X, double sq_threshold, std::vector<char> *inliers);
+
+// Bearing-vector inlier selection for relative pose (Sampson-on-the-sphere, same
+// (x,y)-subspace form as compute_sampson_msac_score_bearing). Returns the number
+// of inliers. Optional cheirality check via check_cheirality(pose, b1, b2).
+int get_inliers_rel_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings1,
+                            const std::vector<Point3D> &bearings2, double sq_threshold, std::vector<char> *inliers,
+                            bool check_cheirality_flag = true);
+
 // Returns MSAC score for the Tangent Sampson error (Terekhov and Larsson, CVPR 2023)
 double compute_tangent_sampson_msac_score(const Eigen::Matrix3d &F, const std::vector<Point2D> &x1,
                                           const std::vector<Point2D> &x2, const Camera &cam1, const Camera &cam2,
