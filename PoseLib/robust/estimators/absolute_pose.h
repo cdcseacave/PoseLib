@@ -75,8 +75,9 @@ class AbsolutePoseEstimator {
 // Scoring is the squared chord distance between observed and predicted
 // unit bearings (no cheirality check — works for the full sphere). The
 // threshold opt.max_error is interpreted in chord-distance units, not pixels:
-// callers should convert a pixel-space threshold via
-//   angle = camera.PixelErrorToAngular(pixel_threshold);
+// callers should convert a pixel-space threshold by unprojecting two nearby
+// pixels with the camera model, measuring the angle between the resulting
+// unit bearings, and then setting
 //   chord = 2 * sin(angle / 2);
 //
 // Uses the existing bearing-native p3p solver internally, so the minimal
