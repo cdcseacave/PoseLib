@@ -34,8 +34,6 @@ namespace test::bearing {
 
 namespace {
 
-constexpr double kPi = 3.14159265358979323846;
-
 // Fixed reference pose — same across all test runs so finite-difference
 // checks happen at the same point.
 CameraPose reference_pose() {
@@ -65,7 +63,7 @@ void build_full_sphere_scene(size_t N, CameraPose &pose, std::vector<Point3D> &b
     for (size_t i = 0; i < N; ++i) {
         // Uniform sphere sampling by cos(theta) + phi; radius ~5.
         const double u = rng.uniform(-1.0, 1.0);
-        const double phi = rng.uniform(-kPi, kPi);
+        const double phi = rng.uniform(-M_PI, M_PI);
         const double r = 4.5 + rng.uniform(0.0, 1.0);
         const double s = std::sqrt(std::max(0.0, 1.0 - u * u));
         const Eigen::Vector3d Xw(r * s * std::cos(phi), r * u, r * s * std::sin(phi));
@@ -100,7 +98,7 @@ void build_two_view_scene(size_t N, CameraPose &pose_rel, std::vector<Point3D> &
 
     for (size_t i = 0; i < N; ++i) {
         const double u = rng.uniform(-1.0, 1.0);
-        const double phi = rng.uniform(-kPi, kPi);
+        const double phi = rng.uniform(-M_PI, M_PI);
         const double r = 4.5 + rng.uniform(0.0, 1.0);
         const double s = std::sqrt(std::max(0.0, 1.0 - u * u));
         const Eigen::Vector3d X(r * s * std::cos(phi), r * u, r * s * std::sin(phi));
