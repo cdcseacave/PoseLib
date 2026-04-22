@@ -45,6 +45,20 @@ namespace poselib {
 RansacStats estimate_absolute_pose(const std::vector<Point2D> &points2D, const std::vector<Point3D> &points3D,
                                    AbsolutePoseOptions opt, Image *image, std::vector<char> *inliers);
 
+// Estimates absolute pose from 3D unit bearing vectors (any central camera model:
+// pinhole, spherical / equirectangular, fisheye, ...). Uses LO-RANSAC followed by
+// non-linear refinement. Scoring is chord-distance squared on the unit sphere,
+// no cheirality check — works for the full sphere including back-hemisphere points.
+//
+// opt.max_error is interpreted in chord-distance units; callers convert from a
+// pixel threshold via the camera's PixelErrorToAngular helper followed by
+// chord = 2*sin(angle/2). For pinhole bearings this path is algebraically
+// equivalent to estimate_absolute_pose(Point2D, ...) when bearings come from
+// normalize((X/Z, Y/Z, 1)).
+RansacStats estimate_absolute_pose_bearings(const std::vector<Point3D> &bearings,
+                                            const std::vector<Point3D> &points3D, const AbsolutePoseOptions &opt,
+                                            CameraPose *pose, std::vector<char> *inliers);
+
 // Estimates generalized absolute pose using LO-RANSAC followed by non-linear refinement
 // Threshold for reprojection error is set by RansacOptions.max_reproj_error
 RansacStats estimate_generalized_absolute_pose(const std::vector<std::vector<Point2D>> &points2D,
@@ -68,6 +82,32 @@ RansacStats estimate_absolute_pose_pnpl(const std::vector<Point2D> &points2D, co
 RansacStats estimate_relative_pose(const std::vector<Point2D> &points2D_1, const std::vector<Point2D> &points2D_2,
                                    const Camera &camera1, const Camera &camera2, const RelativePoseOptions &opt,
                                    CameraPose *relative_pose, std::vector<char> *inliers);
+
+// Estimates relative pose from 3D unit bearing vectors (any central camera model:
+// pinhole, spherical / equirectangular, fisheye, ...). Uses LO-RANSAC followed by
+// non-linear refinement. Scoring is Sampson-on-the-sphere (the (x,y)-subspace form
+// that reduces to the 2D Sampson error for pinhole bearings).
+//
+// Cheirality is checked by default via check_cheirality(pose, b1, b2), which is
+// bearing-native: it asserts that the midpoint-triangulation parameters along
+// each bearing ray are positive (i.e. the 3D point lies in the observed direction
+// along both bearings). This works for ANY unit bearing — including back-hemisphere
+// spherical features where camera-space z < 0 — because the test is about ray
+// direction, not a z-sign check. Without cheirality the four (R, ±t), (R', ±t)
+// decompositions of the essential matrix produce identical Sampson scores, so
+// RANSAC would pick whichever one the 5-point solver returned first; keeping it
+// enabled disambiguates the decomposition robustly. Set check_cheirality=false
+// only for intentional virtual-point reconstructions.
+//
+// opt.max_error is interpreted as the Sampson threshold in bearing-normalized
+// units (radians in the small-error limit — use RelativePoseOptions::SetMaxErrorFromAngle
+// to set it from an angular threshold). For pinhole bearings with b.z == 1 this
+// is the same threshold the pinhole estimate_relative_pose would use after
+// unprojection.
+RansacStats estimate_relative_pose_bearings(const std::vector<Point3D> &bearings_1,
+                                            const std::vector<Point3D> &bearings_2, const RelativePoseOptions &opt,
+                                            CameraPose *relative_pose, std::vector<char> *inliers,
+                                            bool check_cheirality = true);
 
 // Estimates relative geometry from using points and estimated depth using LO-RANSAC followed by non-linear refinement
 // Threshold for Sampson error is set by RansacOptions.max_epipolar_error
