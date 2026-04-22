@@ -50,11 +50,11 @@ RansacStats estimate_absolute_pose(const std::vector<Point2D> &points2D, const s
 // non-linear refinement. Scoring is chord-distance squared on the unit sphere,
 // no cheirality check — works for the full sphere including back-hemisphere points.
 //
-// opt.max_error is interpreted in chord-distance units; callers convert from a
-// pixel threshold via the camera's PixelErrorToAngular helper followed by
-// chord = 2*sin(angle/2). For pinhole bearings this path is algebraically
-// equivalent to estimate_absolute_pose(Point2D, ...) when bearings come from
-// normalize((X/Z, Y/Z, 1)).
+// opt.max_error is interpreted in chord-distance units; callers converting from a
+// pixel threshold should first map that threshold to an angular error using the
+// relevant camera model, then use chord = 2*sin(angle/2). For pinhole bearings
+// this path is algebraically equivalent to estimate_absolute_pose(Point2D, ...)
+// when bearings come from normalize((X/Z, Y/Z, 1)).
 RansacStats estimate_absolute_pose_bearings(const std::vector<Point3D> &bearings,
                                             const std::vector<Point3D> &points3D, const AbsolutePoseOptions &opt,
                                             CameraPose *pose, std::vector<char> *inliers);
