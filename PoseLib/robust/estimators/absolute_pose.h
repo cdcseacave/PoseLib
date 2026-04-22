@@ -86,8 +86,7 @@ class BearingAbsolutePoseEstimator {
   public:
     BearingAbsolutePoseEstimator(const AbsolutePoseOptions &opt, const std::vector<Point3D> &bearings,
                                  const std::vector<Point3D> &points3D)
-        : num_data(bearings.size()), opt(opt), b(bearings), X(points3D),
-          sampler(num_data, sample_sz, opt.ransac) {
+        : num_data(bearings.size()), opt(opt), b(bearings), X(points3D), sampler(num_data, sample_sz, opt.ransac) {
         xs.resize(sample_sz);
         Xs.resize(sample_sz);
         sample.resize(sample_sz);
