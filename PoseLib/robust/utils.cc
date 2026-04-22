@@ -170,8 +170,7 @@ double compute_msac_score_bearing(const CameraPose &pose, const std::vector<Poin
         const Eigen::Vector3d Xcam = R * X[k] + t;
         const double norm_Xcam = Xcam.norm();
         if (norm_Xcam < 1e-12) {
-            // Degenerate: 3D point coincides with the camera center.
-            score += sq_threshold;
+            // Degenerate correspondence; final outlier term accounts for it once.
             continue;
         }
         const Eigen::Vector3d pred = Xcam / norm_Xcam;
@@ -214,7 +213,7 @@ double compute_sampson_msac_score_bearing(const CameraPose &pose, const std::vec
         const double Cy = Etb2(0) * Etb2(0) + Etb2(1) * Etb2(1);
         const double denom = Cx + Cy;
         if (denom < 1e-12) {
-            score += sq_threshold;
+            // Degenerate correspondence; final outlier term accounts for it once.
             continue;
         }
         const double r2 = C * C / denom;

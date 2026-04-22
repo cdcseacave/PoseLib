@@ -12,6 +12,7 @@
 #include "optim_test_utils.h"
 #include "test.h"
 
+#include <PoseLib/misc/constants.h>
 #include <PoseLib/robust.h>
 #include <PoseLib/robust/bundle.h>
 #include <PoseLib/robust/estimators/absolute_pose.h>
@@ -23,7 +24,6 @@
 #include <PoseLib/robust/robust_loss.h>
 #include <PoseLib/robust/utils.h>
 #include <PoseLib/types.h>
-
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -38,8 +38,7 @@ namespace {
 // checks happen at the same point.
 CameraPose reference_pose() {
     const Eigen::Matrix3d R =
-        (Eigen::AngleAxisd(0.28, Eigen::Vector3d::UnitY()) *
-         Eigen::AngleAxisd(-0.14, Eigen::Vector3d::UnitX()) *
+        (Eigen::AngleAxisd(0.28, Eigen::Vector3d::UnitY()) * Eigen::AngleAxisd(-0.14, Eigen::Vector3d::UnitX()) *
          Eigen::AngleAxisd(0.09, Eigen::Vector3d::UnitZ()))
             .toRotationMatrix();
     return CameraPose(R, Eigen::Vector3d(0.2, -0.15, 0.35));
@@ -49,9 +48,8 @@ CameraPose reference_pose() {
 // on a sphere of radius ~5 around origin, so roughly half of them are
 // behind the camera. For each point we compute the bearing = normalized
 // direction from camera center to the point.
-void build_full_sphere_scene(size_t N, CameraPose &pose, std::vector<Point3D> &bearings,
-                             std::vector<Point3D> &X, const std::string &case_name = "bearing_scene",
-                             size_t case_index = 0) {
+void build_full_sphere_scene(size_t N, CameraPose &pose, std::vector<Point3D> &bearings, std::vector<Point3D> &X,
+                             const std::string &case_name = "bearing_scene", size_t case_index = 0) {
     pose = reference_pose();
     test_rng::Rng rng = test_rng::make_rng(case_name, case_index);
     bearings.clear();
@@ -83,9 +81,8 @@ void build_full_sphere_scene(size_t N, CameraPose &pose, std::vector<Point3D> &b
 // Build a two-view full-sphere scene: two cameras with a small baseline,
 // shared 3D points on a sphere around origin, bearings computed in each
 // camera's frame.
-void build_two_view_scene(size_t N, CameraPose &pose_rel, std::vector<Point3D> &b1,
-                          std::vector<Point3D> &b2, const std::string &case_name = "bearing_two_view",
-                          size_t case_index = 0) {
+void build_two_view_scene(size_t N, CameraPose &pose_rel, std::vector<Point3D> &b1, std::vector<Point3D> &b2,
+                          const std::string &case_name = "bearing_two_view", size_t case_index = 0) {
     // Pose 1: identity. Pose 2: small rotation + translation.
     const CameraPose pose1;
     const CameraPose pose2 = reference_pose();
@@ -138,7 +135,6 @@ void add_bearing_noise(std::vector<Point3D> &b, double angle_scale, const std::s
 
 } // namespace
 
-
 ////////////////////////////////////////////////////////////////////////////////
 // Scoring primitives
 
@@ -171,12 +167,11 @@ bool test_bearing_sampson_score_zero_at_gt() {
     // At ground truth all points are cheiral, so the score should still be 0
     // with all N points counted as inliers.
     double score = compute_sampson_msac_score_bearing(pose_rel, b1, b2, sq_threshold, &inliers,
-                                                       /*check_cheirality_flag=*/true);
+                                                      /*check_cheirality_flag=*/true);
     REQUIRE_EQ(inliers, N);
     REQUIRE_SMALL(score, 1e-9);
     return true;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // Refiner Jacobian validation (central finite differences)
@@ -296,7 +291,6 @@ bool test_bearing_relative_pose_jacobian() {
     return true;
 }
 
-
 ////////////////////////////////////////////////////////////////////////////////
 // LM convergence (single bundle_adjust_bearing / refine_relpose_bearing call)
 
@@ -324,9 +318,9 @@ bool test_bearing_absolute_pose_refinement() {
     REQUIRE(check_bundle_cost_and_gradient(stats, 1e-6, "bearing_absolute_pose_refinement"));
 
     // Verify that we converged back to the ground truth.
-    const Eigen::Quaterniond q_err = Eigen::Quaterniond(pose.q(0), pose.q(1), pose.q(2), pose.q(3)) *
-                                     Eigen::Quaterniond(pose_gt.q(0), pose_gt.q(1), pose_gt.q(2), pose_gt.q(3))
-                                         .conjugate();
+    const Eigen::Quaterniond q_err =
+        Eigen::Quaterniond(pose.q(0), pose.q(1), pose.q(2), pose.q(3)) *
+        Eigen::Quaterniond(pose_gt.q(0), pose_gt.q(1), pose_gt.q(2), pose_gt.q(3)).conjugate();
     const double angle_err = 2.0 * std::acos(std::clamp(std::abs(q_err.w()), -1.0, 1.0));
     REQUIRE_SMALL(angle_err, 1e-6);
     REQUIRE_SMALL((pose.t - pose_gt.t).norm(), 1e-6);
@@ -356,16 +350,15 @@ bool test_bearing_relative_pose_refinement() {
 
     // Rotation should recover exactly; translation is up to scale, so
     // compare direction only.
-    const Eigen::Quaterniond q_err = Eigen::Quaterniond(pose.q(0), pose.q(1), pose.q(2), pose.q(3)) *
-                                     Eigen::Quaterniond(pose_gt.q(0), pose_gt.q(1), pose_gt.q(2), pose_gt.q(3))
-                                         .conjugate();
+    const Eigen::Quaterniond q_err =
+        Eigen::Quaterniond(pose.q(0), pose.q(1), pose.q(2), pose.q(3)) *
+        Eigen::Quaterniond(pose_gt.q(0), pose_gt.q(1), pose_gt.q(2), pose_gt.q(3)).conjugate();
     const double angle_err = 2.0 * std::acos(std::clamp(std::abs(q_err.w()), -1.0, 1.0));
     REQUIRE_SMALL(angle_err, 1e-5);
     const double t_sim = pose.t.normalized().dot(pose_gt.t.normalized());
     REQUIRE(t_sim > 1.0 - 1e-6);
     return true;
 }
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // Full RANSAC + LM pipeline via estimate_*_bearings
@@ -390,9 +383,9 @@ bool test_estimate_absolute_pose_bearings() {
     REQUIRE(stats.num_inliers == N);
 
     // Verify recovered pose matches ground truth.
-    const Eigen::Quaterniond q_err = Eigen::Quaterniond(pose.q(0), pose.q(1), pose.q(2), pose.q(3)) *
-                                     Eigen::Quaterniond(pose_gt.q(0), pose_gt.q(1), pose_gt.q(2), pose_gt.q(3))
-                                         .conjugate();
+    const Eigen::Quaterniond q_err =
+        Eigen::Quaterniond(pose.q(0), pose.q(1), pose.q(2), pose.q(3)) *
+        Eigen::Quaterniond(pose_gt.q(0), pose_gt.q(1), pose_gt.q(2), pose_gt.q(3)).conjugate();
     const double angle_err = 2.0 * std::acos(std::clamp(std::abs(q_err.w()), -1.0, 1.0));
     REQUIRE_SMALL(angle_err, 1e-4);
     REQUIRE_SMALL((pose.t - pose_gt.t).norm(), 1e-4);
@@ -422,9 +415,9 @@ bool test_estimate_relative_pose_bearings() {
     REQUIRE(stats.num_inliers >= N - 5); // Allow a few 5pt-solver outliers
 
     // Recovered rotation should match; translation up to scale.
-    const Eigen::Quaterniond q_err = Eigen::Quaterniond(pose.q(0), pose.q(1), pose.q(2), pose.q(3)) *
-                                     Eigen::Quaterniond(pose_gt.q(0), pose_gt.q(1), pose_gt.q(2), pose_gt.q(3))
-                                         .conjugate();
+    const Eigen::Quaterniond q_err =
+        Eigen::Quaterniond(pose.q(0), pose.q(1), pose.q(2), pose.q(3)) *
+        Eigen::Quaterniond(pose_gt.q(0), pose_gt.q(1), pose_gt.q(2), pose_gt.q(3)).conjugate();
     const double angle_err = 2.0 * std::acos(std::clamp(std::abs(q_err.w()), -1.0, 1.0));
     REQUIRE_SMALL(angle_err, 1e-3);
     const double t_sim = pose.t.normalized().dot(pose_gt.t.normalized());
@@ -437,15 +430,10 @@ bool test_estimate_relative_pose_bearings() {
 using namespace test::bearing;
 std::vector<Test> register_optim_bearing_test() {
     return {
-        TEST(test_bearing_msac_score_zero_at_gt),
-        TEST(test_bearing_sampson_score_zero_at_gt),
-        TEST(test_bearing_absolute_pose_normal_acc),
-        TEST(test_bearing_absolute_pose_jacobian),
-        TEST(test_bearing_relative_pose_normal_acc),
-        TEST(test_bearing_relative_pose_jacobian),
-        TEST(test_bearing_absolute_pose_refinement),
-        TEST(test_bearing_relative_pose_refinement),
-        TEST(test_estimate_absolute_pose_bearings),
-        TEST(test_estimate_relative_pose_bearings),
+        TEST(test_bearing_msac_score_zero_at_gt),    TEST(test_bearing_sampson_score_zero_at_gt),
+        TEST(test_bearing_absolute_pose_normal_acc), TEST(test_bearing_absolute_pose_jacobian),
+        TEST(test_bearing_relative_pose_normal_acc), TEST(test_bearing_relative_pose_jacobian),
+        TEST(test_bearing_absolute_pose_refinement), TEST(test_bearing_relative_pose_refinement),
+        TEST(test_estimate_absolute_pose_bearings),  TEST(test_estimate_relative_pose_bearings),
     };
 }

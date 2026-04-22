@@ -196,10 +196,11 @@ class BearingRelativePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
 
         for (size_t k = 0; k < b1.size(); ++k) {
             const double C = b2[k].dot(E * b1[k]);
-            const double nJc_sq = (E.block<2, 3>(0, 0) * b1[k]).squaredNorm() +
-                                  (E.block<3, 2>(0, 0).transpose() * b2[k]).squaredNorm();
+            const double nJc_sq =
+                (E.block<2, 3>(0, 0) * b1[k]).squaredNorm() + (E.block<3, 2>(0, 0).transpose() * b2[k]).squaredNorm();
             if (nJc_sq < 1e-20) {
-                acc.add_residual(0.0, weights[k]);
+                // Skip numerically-degenerate terms to keep residual and
+                // jacobian accumulation consistent.
                 continue;
             }
             acc.add_residual(C / std::sqrt(nJc_sq), weights[k]);
@@ -240,28 +241,28 @@ class BearingRelativePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
             //
             // dC/dE(i,j) = b1[k](j) * b2[k](i).
             Eigen::Matrix<double, 1, 9> dF;
-            dF << b1[k](0) * b2[k](0),  // E(0,0)
-                  b1[k](0) * b2[k](1),  // E(1,0)
-                  b1[k](0) * b2[k](2),  // E(2,0)
-                  b1[k](1) * b2[k](0),  // E(0,1)
-                  b1[k](1) * b2[k](1),  // E(1,1)
-                  b1[k](1) * b2[k](2),  // E(2,1)
-                  b1[k](2) * b2[k](0),  // E(0,2)
-                  b1[k](2) * b2[k](1),  // E(1,2)
-                  b1[k](2) * b2[k](2);  // E(2,2)
+            dF << b1[k](0) * b2[k](0), // E(0,0)
+                b1[k](0) * b2[k](1),   // E(1,0)
+                b1[k](0) * b2[k](2),   // E(2,0)
+                b1[k](1) * b2[k](0),   // E(0,1)
+                b1[k](1) * b2[k](1),   // E(1,1)
+                b1[k](1) * b2[k](2),   // E(2,1)
+                b1[k](2) * b2[k](0),   // E(0,2)
+                b1[k](2) * b2[k](1),   // E(1,2)
+                b1[k](2) * b2[k](2);   // E(2,2)
             // Correction terms from d(J_C)/dE, where J_C is the (x,y)-subspace Jacobian:
             //   J_C = [ E^T b2 (0),  E^T b2 (1),  E b1 (0),  E b1 (1) ]
             // For pinhole bearings b1(2)=b2(2)=1 this reduces exactly to the pinhole form
             // in PinholeRelativePoseRefiner.
             const double s = C * inv_nJ_C * inv_nJ_C;
-            dF(0) -= s * (J_C(2) * b1[k](0) + J_C(0) * b2[k](0));  // E(0,0)
-            dF(1) -= s * (J_C(3) * b1[k](0) + J_C(0) * b2[k](1));  // E(1,0)
-            dF(2) -= s * (J_C(0) * b2[k](2));                      // E(2,0)
-            dF(3) -= s * (J_C(2) * b1[k](1) + J_C(1) * b2[k](0));  // E(0,1)
-            dF(4) -= s * (J_C(3) * b1[k](1) + J_C(1) * b2[k](1));  // E(1,1)
-            dF(5) -= s * (J_C(1) * b2[k](2));                      // E(2,1)
-            dF(6) -= s * (J_C(2) * b1[k](2));                      // E(0,2)
-            dF(7) -= s * (J_C(3) * b1[k](2));                      // E(1,2)
+            dF(0) -= s * (J_C(2) * b1[k](0) + J_C(0) * b2[k](0)); // E(0,0)
+            dF(1) -= s * (J_C(3) * b1[k](0) + J_C(0) * b2[k](1)); // E(1,0)
+            dF(2) -= s * (J_C(0) * b2[k](2));                     // E(2,0)
+            dF(3) -= s * (J_C(2) * b1[k](1) + J_C(1) * b2[k](0)); // E(0,1)
+            dF(4) -= s * (J_C(3) * b1[k](1) + J_C(1) * b2[k](1)); // E(1,1)
+            dF(5) -= s * (J_C(1) * b2[k](2));                     // E(2,1)
+            dF(6) -= s * (J_C(2) * b1[k](2));                     // E(0,2)
+            dF(7) -= s * (J_C(3) * b1[k](2));                     // E(1,2)
             // dF(8) — E(2,2); neither J_C(0..3) depends on E(2,2), no correction.
             dF *= inv_nJ_C;
 
