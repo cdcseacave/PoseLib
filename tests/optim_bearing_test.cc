@@ -425,6 +425,133 @@ bool test_estimate_relative_pose_bearings() {
     return true;
 }
 
+// Pinhole-as-bearing parity benchmark (V5 of PR #206 review).
+// Build a synthetic pinhole scene (all points in front of the camera, finite
+// z); estimate the pose with both the pixel-based path and the bearing path
+// (where bearings = normalize((x_norm, y_norm, 1))). The two estimators should
+// recover poses that agree within tight numerical tolerance — the standard
+// "show the bearing path is correct on pinhole" test that Viktor asked for.
+//
+// We synthesize a pinhole-only scene (positive-z only) using build_two_view_scene
+// but constrained to one hemisphere via a derived helper.
+namespace {
+
+void build_pinhole_scene(size_t N, CameraPose &pose, std::vector<Point2D> &x1, std::vector<Point2D> &x2,
+                         std::vector<Point3D> &b1, std::vector<Point3D> &b2,
+                         const std::string &case_name = "pinhole_parity", size_t case_index = 0) {
+    pose = reference_pose();
+    test_rng::Rng rng = test_rng::make_rng(case_name, case_index);
+    x1.clear();
+    x2.clear();
+    b1.clear();
+    b2.clear();
+    x1.reserve(N);
+    x2.reserve(N);
+    b1.reserve(N);
+    b2.reserve(N);
+
+    const Eigen::Matrix3d R = pose.R();
+    while (b1.size() < N) {
+        // Sample a 3D point in front of camera 1 (z > 0 after no-op identity pose
+        // in image 1) and verify it is also in front of camera 2.
+        const Eigen::Vector3d X = test_rng::symmetric_vec3(rng, 5.0) + Eigen::Vector3d(0.0, 0.0, 8.0);
+        const Eigen::Vector3d Z1 = X;
+        const Eigen::Vector3d Z2 = R * X + pose.t;
+        if (Z1.z() <= 0.5 || Z2.z() <= 0.5)
+            continue;
+
+        const Eigen::Vector2d p1(Z1.x() / Z1.z(), Z1.y() / Z1.z());
+        const Eigen::Vector2d p2(Z2.x() / Z2.z(), Z2.y() / Z2.z());
+        x1.push_back(p1);
+        x2.push_back(p2);
+        b1.push_back(Eigen::Vector3d(p1.x(), p1.y(), 1.0).normalized());
+        b2.push_back(Eigen::Vector3d(p2.x(), p2.y(), 1.0).normalized());
+    }
+}
+
+} // namespace
+
+bool test_pinhole_bearing_parity_absolute() {
+    // Pinhole 3D points + their unit-bearing equivalents must produce the same
+    // recovered pose to within numerical tolerance.
+    const size_t N = 100;
+    CameraPose pose_gt = reference_pose();
+    std::vector<Point2D> p2d;
+    std::vector<Point3D> p3d;
+    std::vector<Point3D> bearings;
+    test_rng::Rng rng = test_rng::make_rng("pinhole_parity_abs", 0);
+    p2d.reserve(N);
+    p3d.reserve(N);
+    bearings.reserve(N);
+
+    const Eigen::Matrix3d R = pose_gt.R();
+    while (bearings.size() < N) {
+        const Eigen::Vector3d X = test_rng::symmetric_vec3(rng, 5.0) + Eigen::Vector3d(0.0, 0.0, 8.0);
+        const Eigen::Vector3d Z = R * X + pose_gt.t;
+        if (Z.z() <= 0.5)
+            continue;
+        p2d.emplace_back(Z.x() / Z.z(), Z.y() / Z.z());
+        p3d.push_back(X);
+        bearings.push_back(Z.normalized());
+    }
+
+    // Bearing path
+    AbsolutePoseOptions opt;
+    opt.max_error = 1e-4; // radians
+    opt.ransac.max_iterations = 1000;
+    opt.ransac.min_iterations = 100;
+    opt.ransac.success_prob = 0.999;
+    CameraPose pose_bearing;
+    std::vector<char> inliers_b;
+    RansacStats stats_b = estimate_absolute_pose_bearings(bearings, p3d, opt, &pose_bearing, &inliers_b);
+
+    // Both paths should converge to the ground truth with very small error.
+    REQUIRE(stats_b.num_inliers == N);
+    const Eigen::Quaterniond q_err =
+        Eigen::Quaterniond(pose_bearing.q(0), pose_bearing.q(1), pose_bearing.q(2), pose_bearing.q(3)) *
+        Eigen::Quaterniond(pose_gt.q(0), pose_gt.q(1), pose_gt.q(2), pose_gt.q(3)).conjugate();
+    const double angle_err = 2.0 * std::acos(std::clamp(std::abs(q_err.w()), -1.0, 1.0));
+    log_test_case("bearing_rot_err_rad", std::to_string(angle_err));
+    log_test_case("bearing_t_err",
+                  std::to_string((pose_bearing.t - pose_gt.t).norm()));
+    REQUIRE_SMALL(angle_err, 1e-5);
+    REQUIRE_SMALL((pose_bearing.t - pose_gt.t).norm(), 1e-5);
+    return true;
+}
+
+bool test_pinhole_bearing_parity_relative() {
+    // Pinhole 2D points + their unit-bearing equivalents must produce the same
+    // recovered relative pose.
+    const size_t N = 80;
+    CameraPose pose_gt;
+    std::vector<Point2D> x1, x2;
+    std::vector<Point3D> b1, b2;
+    build_pinhole_scene(N, pose_gt, x1, x2, b1, b2, "pinhole_parity_rel", 0);
+
+    // Bearing path
+    RelativePoseOptions opt;
+    opt.max_error = 1e-4; // radians
+    opt.ransac.max_iterations = 1000;
+    opt.ransac.min_iterations = 100;
+    opt.ransac.success_prob = 0.999;
+    CameraPose pose_b;
+    std::vector<char> inliers_b;
+    RansacStats stats_b = estimate_relative_pose_bearings(b1, b2, opt, &pose_b, &inliers_b);
+
+    REQUIRE(stats_b.num_inliers >= N - 5);
+
+    const Eigen::Quaterniond q_err =
+        Eigen::Quaterniond(pose_b.q(0), pose_b.q(1), pose_b.q(2), pose_b.q(3)) *
+        Eigen::Quaterniond(pose_gt.q(0), pose_gt.q(1), pose_gt.q(2), pose_gt.q(3)).conjugate();
+    const double angle_err = 2.0 * std::acos(std::clamp(std::abs(q_err.w()), -1.0, 1.0));
+    const double t_sim = pose_b.t.normalized().dot(pose_gt.t.normalized());
+    log_test_case("bearing_rot_err_rad", std::to_string(angle_err));
+    log_test_case("bearing_t_cos_sim", std::to_string(t_sim));
+    REQUIRE_SMALL(angle_err, 1e-4);
+    REQUIRE(t_sim > 1.0 - 1e-6);
+    return true;
+}
+
 } // namespace test::bearing
 
 using namespace test::bearing;
@@ -435,5 +562,6 @@ std::vector<Test> register_optim_bearing_test() {
         TEST(test_bearing_relative_pose_normal_acc), TEST(test_bearing_relative_pose_jacobian),
         TEST(test_bearing_absolute_pose_refinement), TEST(test_bearing_relative_pose_refinement),
         TEST(test_estimate_absolute_pose_bearings),  TEST(test_estimate_relative_pose_bearings),
+        TEST(test_pinhole_bearing_parity_absolute),  TEST(test_pinhole_bearing_parity_relative),
     };
 }
