@@ -156,8 +156,10 @@ double compute_msac_score(const CameraPose &pose, double focal, const std::vecto
 
 // Bearing-vector MSAC score for absolute pose.
 // Residual is the squared chord distance between the observed unit bearing and
-// the predicted bearing normalize(R*X + t). No cheirality check — spherical
-// cameras observe the full sphere, so back-hemisphere points are valid.
+// the predicted bearing normalize(R*X + t). Cheirality is enforced bearing-
+// natively as b_pred . b_obs > 0 (the spherical replacement for the pinhole
+// Z(2) > 0 check); back-hemisphere features remain valid as long as observed
+// and predicted bearings agree on sign.
 double compute_msac_score_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings,
                                   const std::vector<Point3D> &X, double sq_threshold, size_t *inlier_count) {
     *inlier_count = 0;
@@ -174,6 +176,11 @@ double compute_msac_score_bearing(const CameraPose &pose, const std::vector<Poin
             continue;
         }
         const Eigen::Vector3d pred = Xcam / norm_Xcam;
+        // Bearing-native cheirality: antipodal correspondences are outliers.
+        // Final outlier term accounts for them once.
+        if (pred.dot(bearings[k]) <= 0.0) {
+            continue;
+        }
         // bearings[k] is assumed to be a (near-)unit vector. Chord^2 = |b_obs - pred|^2.
         const Eigen::Vector3d d = bearings[k] - pred;
         const double r_sq = d.squaredNorm();
@@ -255,6 +262,11 @@ void get_inliers_abs_bearing(const CameraPose &pose, const std::vector<Point3D> 
             continue;
         }
         const Eigen::Vector3d pred = Z / norm_Z;
+        // Bearing-native cheirality: antipodal correspondences are outliers.
+        if (pred.dot(bearings[k]) <= 0.0) {
+            (*inliers)[k] = 0;
+            continue;
+        }
         const double r_sq = (bearings[k] - pred).squaredNorm();
         (*inliers)[k] = (r_sq < sq_threshold) ? 1 : 0;
     }

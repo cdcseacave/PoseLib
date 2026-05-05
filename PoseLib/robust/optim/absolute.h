@@ -286,6 +286,10 @@ class BearingAbsolutePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
             if (norm_Z < 1e-12)
                 continue;
             const Eigen::Vector3d b_pred = Z / norm_Z;
+            // Bearing-native cheirality: skip antipodal correspondences. They
+            // pull LM toward a mirror-image pose if included.
+            if (b_pred.dot(b[i]) <= 0.0)
+                continue;
             const Eigen::Vector3d res = b_pred - b[i];
             acc.add_residual(res, weights[i]);
         }
@@ -304,6 +308,10 @@ class BearingAbsolutePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
                 continue;
 
             const Eigen::Vector3d b_pred = Z / norm_Z;
+            // Bearing-native cheirality: skip antipodal correspondences so the
+            // jacobian accumulation stays consistent with compute_residual.
+            if (b_pred.dot(b[i]) <= 0.0)
+                continue;
             const Eigen::Vector3d res = b_pred - b[i];
 
             // d(b_pred)/dZ = (I - b_pred * b_pred^T) / |Z|  (tangent-space projector
