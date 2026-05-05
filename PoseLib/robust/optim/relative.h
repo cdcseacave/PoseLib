@@ -167,20 +167,22 @@ class PinholeRelativePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
 
 // Bearing-vector variant of PinholeRelativePoseRefiner. Takes pre-computed unit
 // bearing vectors from any central camera model (pinhole, spherical, fisheye, ...)
-// instead of 2D normalized image coordinates. Minimizes Sampson error in the same
-// (x,y) subspace form as the pinhole refiner, which for pinhole bearings
-// b = (X/Z, Y/Z, 1)/|(X/Z, Y/Z, 1)| is algebraically equivalent to the pinhole
-// Sampson error; for spherical bearings with b.z != 1 it generalizes naturally.
+// instead of 2D normalized image coordinates. Minimizes the unit-norm symmetric
+// Sampson error on the sphere:
+//   r = C / sqrt(D)
+//   C = b2^T * E * b1
+//   D = |E*b1|^2 + |E^T*b2|^2
+// which is the asymptotic perpendicular angular distance to the epipolar great
+// circles. Reduces to the standard 2D Sampson formula once bearings are made
+// unit, and generalizes naturally to any central camera. Note this is NOT
+// algebraically identical to the 2D Sampson minimized by PinholeRelativePoseRefiner
+// (the pixel path uses non-unit homogeneous (x, y, 1)) — the two share the same
+// minimum in the noise-free limit but differ by O(error^3).
 //
-// The residual is computed as C / sqrt(nJc_sq) where:
-//   C       = b2^T * E * b1
-//   Eb1     = E * b1,  Etb2 = E^T * b2
-//   nJc_sq  = Eb1(0)^2 + Eb1(1)^2 + Etb2(0)^2 + Etb2(1)^2
-//
-// This picks the (x, y) subspace of the Jacobians, matching the pinhole form —
-// for pinhole b.z = 1 this is exactly the 2D Sampson denominator that the
-// PinholeRelativePoseRefiner uses. No cheirality check — spherical cameras
-// observe the full sphere.
+// This refiner does not branch on cheirality; cheirality is handled at the
+// RANSAC scoring step (compute_sampson_msac_score_bearing) via the bearing-
+// native check_cheirality(pose, b1, b2) helper, which works for back-hemisphere
+// features.
 template <typename ResidualWeightVector = UniformWeightVector, typename Accumulator = NormalAccumulator>
 class BearingRelativePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
   public:
@@ -195,15 +197,16 @@ class BearingRelativePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
         essential_from_motion(pose, &E);
 
         for (size_t k = 0; k < b1.size(); ++k) {
-            const double C = b2[k].dot(E * b1[k]);
-            const double nJc_sq =
-                (E.block<2, 3>(0, 0) * b1[k]).squaredNorm() + (E.block<3, 2>(0, 0).transpose() * b2[k]).squaredNorm();
-            if (nJc_sq < 1e-20) {
+            const Eigen::Vector3d Eb1 = E * b1[k];
+            const Eigen::Vector3d Etb2 = E.transpose() * b2[k];
+            const double C = b2[k].dot(Eb1);
+            const double D = Eb1.squaredNorm() + Etb2.squaredNorm();
+            if (D < 1e-20) {
                 // Skip numerically-degenerate terms to keep residual and
                 // jacobian accumulation consistent.
                 continue;
             }
-            acc.add_residual(C / std::sqrt(nJc_sq), weights[k]);
+            acc.add_residual(C / std::sqrt(D), weights[k]);
         }
         return acc.get_residual();
     }
@@ -220,51 +223,34 @@ class BearingRelativePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
         deriv_essential_wrt_pose(E, R, tangent_basis, dR, dt);
 
         for (size_t k = 0; k < b1.size(); ++k) {
-            const double C = b2[k].dot(E * b1[k]);
-
-            // J_C is the Jacobian of the epipolar constraint w.r.t. the image points,
-            // restricted to the (x, y) subspace — matches PinholeRelativePoseRefiner.
-            //   J_C = [ (E^T b2)(0),  (E^T b2)(1),  (E b1)(0),  (E b1)(1) ]
-            Eigen::Vector4d J_C;
-            J_C << E.block<3, 2>(0, 0).transpose() * b2[k], E.block<2, 3>(0, 0) * b1[k];
-            const double nJ_C = J_C.norm();
-            if (nJ_C < 1e-10) {
+            const Eigen::Vector3d Eb1 = E * b1[k];               // u
+            const Eigen::Vector3d Etb2 = E.transpose() * b2[k];  // v
+            const double C = b2[k].dot(Eb1);
+            const double D = Eb1.squaredNorm() + Etb2.squaredNorm();
+            if (D < 1e-20) {
                 continue;
             }
-            const double inv_nJ_C = 1.0 / nJ_C;
-            const double r = C * inv_nJ_C;
+            const double inv_sqrtD = 1.0 / std::sqrt(D);
+            const double r = C * inv_sqrtD;
 
-            // Compute Jacobian of Sampson error w.r.t. the flattened (column-major)
-            // essential matrix, using the vec(E) convention that deriv_essential_wrt_pose
-            // expects. Column-major: dF(0)=E(0,0), dF(1)=E(1,0), dF(2)=E(2,0),
-            // dF(3)=E(0,1), dF(4)=E(1,1), dF(5)=E(2,1), dF(6)=E(0,2), dF(7)=E(1,2), dF(8)=E(2,2).
+            // Jacobian of r = C / sqrt(D) w.r.t. E(i,j):
+            //   dC/dE(i,j)  = b1(j) * b2(i)
+            //   dD/dE(i,j)  = 2 * [ Eb1(i) * b1(j) + Etb2(j) * b2(i) ]
+            //   dr/dE(i,j)  = (b1(j)*b2(i)) / sqrt(D)
+            //                - (C / D^{3/2}) * [ Eb1(i)*b1(j) + Etb2(j)*b2(i) ]
             //
-            // dC/dE(i,j) = b1[k](j) * b2[k](i).
+            // vec(E) is column-major: dF(j*3 + i) = dr/dE(i, j).
+            const double s = C * inv_sqrtD / D;  // C / D^(3/2)
             Eigen::Matrix<double, 1, 9> dF;
-            dF << b1[k](0) * b2[k](0), // E(0,0)
-                b1[k](0) * b2[k](1),   // E(1,0)
-                b1[k](0) * b2[k](2),   // E(2,0)
-                b1[k](1) * b2[k](0),   // E(0,1)
-                b1[k](1) * b2[k](1),   // E(1,1)
-                b1[k](1) * b2[k](2),   // E(2,1)
-                b1[k](2) * b2[k](0),   // E(0,2)
-                b1[k](2) * b2[k](1),   // E(1,2)
-                b1[k](2) * b2[k](2);   // E(2,2)
-            // Correction terms from d(J_C)/dE, where J_C is the (x,y)-subspace Jacobian:
-            //   J_C = [ E^T b2 (0),  E^T b2 (1),  E b1 (0),  E b1 (1) ]
-            // For pinhole bearings b1(2)=b2(2)=1 this reduces exactly to the pinhole form
-            // in PinholeRelativePoseRefiner.
-            const double s = C * inv_nJ_C * inv_nJ_C;
-            dF(0) -= s * (J_C(2) * b1[k](0) + J_C(0) * b2[k](0)); // E(0,0)
-            dF(1) -= s * (J_C(3) * b1[k](0) + J_C(0) * b2[k](1)); // E(1,0)
-            dF(2) -= s * (J_C(0) * b2[k](2));                     // E(2,0)
-            dF(3) -= s * (J_C(2) * b1[k](1) + J_C(1) * b2[k](0)); // E(0,1)
-            dF(4) -= s * (J_C(3) * b1[k](1) + J_C(1) * b2[k](1)); // E(1,1)
-            dF(5) -= s * (J_C(1) * b2[k](2));                     // E(2,1)
-            dF(6) -= s * (J_C(2) * b1[k](2));                     // E(0,2)
-            dF(7) -= s * (J_C(3) * b1[k](2));                     // E(1,2)
-            // dF(8) — E(2,2); neither J_C(0..3) depends on E(2,2), no correction.
-            dF *= inv_nJ_C;
+            for (int j = 0; j < 3; ++j) {
+                const double b1j = b1[k](j);
+                const double vj = Etb2(j);
+                for (int i = 0; i < 3; ++i) {
+                    const double b2i = b2[k](i);
+                    dF(j * 3 + i) =
+                        b1j * b2i * inv_sqrtD - s * (Eb1(i) * b1j + vj * b2i);
+                }
+            }
 
             // and then w.r.t. the pose parameters (rotation + tangent basis for translation)
             Eigen::Matrix<double, 1, 5> J;
