@@ -223,8 +223,8 @@ class BearingRelativePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
         deriv_essential_wrt_pose(E, R, tangent_basis, dR, dt);
 
         for (size_t k = 0; k < b1.size(); ++k) {
-            const Eigen::Vector3d Eb1 = E * b1[k];               // u
-            const Eigen::Vector3d Etb2 = E.transpose() * b2[k];  // v
+            const Eigen::Vector3d Eb1 = E * b1[k];              // u
+            const Eigen::Vector3d Etb2 = E.transpose() * b2[k]; // v
             const double C = b2[k].dot(Eb1);
             const double D = Eb1.squaredNorm() + Etb2.squaredNorm();
             if (D < 1e-20) {
@@ -240,15 +240,14 @@ class BearingRelativePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
             //                - (C / D^{3/2}) * [ Eb1(i)*b1(j) + Etb2(j)*b2(i) ]
             //
             // vec(E) is column-major: dF(j*3 + i) = dr/dE(i, j).
-            const double s = C * inv_sqrtD / D;  // C / D^(3/2)
+            const double s = C * inv_sqrtD / D; // C / D^(3/2)
             Eigen::Matrix<double, 1, 9> dF;
             for (int j = 0; j < 3; ++j) {
                 const double b1j = b1[k](j);
                 const double vj = Etb2(j);
                 for (int i = 0; i < 3; ++i) {
                     const double b2i = b2[k](i);
-                    dF(j * 3 + i) =
-                        b1j * b2i * inv_sqrtD - s * (Eb1(i) * b1j + vj * b2i);
+                    dF(j * 3 + i) = b1j * b2i * inv_sqrtD - s * (Eb1(i) * b1j + vj * b2i);
                 }
             }
 
