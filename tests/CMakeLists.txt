@@ -15,3 +15,7 @@ add_executable(run_tests
 )
 target_link_libraries(run_tests PRIVATE PoseLib::PoseLib Eigen3::Eigen)
 set_compile_flags(run_tests)
+
+add_executable(bearing_parity_bench bearing_parity_bench.cc)
+target_link_libraries(bearing_parity_bench PRIVATE PoseLib::PoseLib Eigen3::Eigen)
+set_compile_flags(bearing_parity_bench)
