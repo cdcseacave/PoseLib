@@ -68,17 +68,18 @@ class AbsolutePoseEstimator {
 // Absolute pose estimator for any central camera model (pinhole, spherical,
 // fisheye, ...) using 3D unit bearing vectors instead of 2D normalized pixels.
 // For spherical cameras this preserves hemisphere information (sign(z)) that
-// the 2D Point2D form loses; for pinhole cameras it is algebraically
-// equivalent to AbsolutePoseEstimator when bearings come from
-// Camera::UnprojectNormalized (i.e., normalize((X/Z, Y/Z, 1))).
+// the 2D Point2D form loses; for pinhole cameras it is first-order equivalent
+// to AbsolutePoseEstimator when bearings come from Camera::UnprojectNormalized
+// (i.e., normalize((X/Z, Y/Z, 1))) — the chord-distance and pixel-plane
+// reprojection objectives share the same minimum in the noise-free limit but
+// differ by O(error^3).
 //
-// Scoring is the squared chord distance between observed and predicted
-// unit bearings (no cheirality check — works for the full sphere). The
-// threshold opt.max_error is interpreted in chord-distance units, not pixels:
-// callers should convert a pixel-space threshold by unprojecting two nearby
-// pixels with the camera model, measuring the angle between the resulting
-// unit bearings, and then setting
-//   chord = 2 * sin(angle / 2);
+// Scoring is the squared chord distance between observed and predicted unit
+// bearings. Cheirality is enforced bearing-natively as b_pred . b_obs > 0
+// (the spherical replacement for the pinhole Z(2) > 0 check); back-hemisphere
+// features remain valid as long as observed and predicted bearings agree on
+// sign. The threshold opt.max_error is taken as an angular threshold in
+// radians and converted internally to chord = 2 * sin(angle / 2).
 //
 // Uses the existing bearing-native p3p solver internally, so the minimal
 // sampling machinery is identical to AbsolutePoseEstimator — only the

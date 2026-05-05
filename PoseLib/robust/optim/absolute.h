@@ -249,7 +249,7 @@ class PinholeAbsolutePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
 // the normalized direction of the transformed 3D point:
 //   Z     = R*X + t
 //   b_pred = Z / |Z|
-//   r      = b_pred - b_obs        (3D residual)
+//   r      = b_pred - b_obs        (3D residual; chord distance on unit sphere)
 //
 // Jacobian derivation:
 //   d(Z/|Z|)/dZ = (I - b_pred * b_pred^T) / |Z|
@@ -257,8 +257,18 @@ class PinholeAbsolutePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
 // (the normal-direction DOF is constrained by |b|=1), which LM handles naturally
 // through the normal equations.
 //
-// Unlike the pinhole refiner there is no Z(2)<0 cheirality check — spherical
-// cameras observe the full sphere and back-hemisphere points are valid.
+// Cheirality is enforced bearing-natively as b_pred . b_obs > 0 (the spherical
+// replacement for the pinhole Z(2) > 0 check); back-hemisphere features remain
+// valid as long as observed and predicted bearings agree on sign. Antipodal
+// pairs (b_pred . b_obs <= 0) are skipped from both residual and jacobian
+// accumulation — they pull LM toward a mirror-image pose if included.
+//
+// Note: the chord-distance residual is first-order equivalent to the pinhole
+// pixel-plane reprojection minimized by PinholeAbsolutePoseRefiner and shares
+// the same minimum in the noise-free limit, but the two objectives differ by
+// O(error^3) and produce slightly different LM iterates in practice. The
+// bearing path is the geometrically correct formulation for non-pinhole
+// central cameras.
 template <typename ResidualWeightVector = UniformWeightVector, typename Accumulator = NormalAccumulator>
 class BearingAbsolutePoseRefiner : public RefinerBase<CameraPose, Accumulator> {
   public:

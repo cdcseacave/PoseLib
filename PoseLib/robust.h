@@ -47,14 +47,19 @@ RansacStats estimate_absolute_pose(const std::vector<Point2D> &points2D, const s
 
 // Estimates absolute pose from 3D unit bearing vectors (any central camera model:
 // pinhole, spherical / equirectangular, fisheye, ...). Uses LO-RANSAC followed by
-// non-linear refinement. Scoring is chord-distance squared on the unit sphere,
-// no cheirality check — works for the full sphere including back-hemisphere points.
+// non-linear refinement. Scoring is chord-distance squared on the unit sphere.
+// Cheirality is enforced bearing-natively as b_pred . b_obs > 0 (the spherical
+// replacement for the pinhole Z(2) > 0 check); back-hemisphere features remain
+// valid as long as observed and predicted bearings agree on sign.
 //
-// opt.max_error is interpreted in chord-distance units; callers converting from a
-// pixel threshold should first map that threshold to an angular error using the
-// relevant camera model, then use chord = 2*sin(angle/2). For pinhole bearings
-// this path is algebraically equivalent to estimate_absolute_pose(Point2D, ...)
-// when bearings come from normalize((X/Z, Y/Z, 1)).
+// opt.max_error is interpreted as an angular threshold in radians: the bearing
+// estimator converts it internally to the chord-distance units used by the
+// scorer. For pinhole bearings this path is first-order equivalent to
+// estimate_absolute_pose(Point2D, ...) when bearings come from
+// normalize((X/Z, Y/Z, 1)) — the chord and pixel-plane reprojection objectives
+// share the same minimum in the noise-free limit but differ by O(error^3) and
+// produce slightly different LM iterates. The bearing path is the
+// geometrically correct formulation for non-pinhole central cameras.
 RansacStats estimate_absolute_pose_bearings(const std::vector<Point3D> &bearings, const std::vector<Point3D> &points3D,
                                             const AbsolutePoseOptions &opt, CameraPose *pose,
                                             std::vector<char> *inliers);
@@ -85,8 +90,11 @@ RansacStats estimate_relative_pose(const std::vector<Point2D> &points2D_1, const
 
 // Estimates relative pose from 3D unit bearing vectors (any central camera model:
 // pinhole, spherical / equirectangular, fisheye, ...). Uses LO-RANSAC followed by
-// non-linear refinement. Scoring is Sampson-on-the-sphere (the (x,y)-subspace form
-// that reduces to the 2D Sampson error for pinhole bearings).
+// non-linear refinement. Scoring is unit-norm symmetric Sampson on the sphere
+//   r = (b2^T E b1) / sqrt(|E b1|^2 + |E^T b2|^2)
+// the asymptotic perpendicular angular distance to the epipolar great circles.
+// This reduces to the standard 2D Sampson for pinhole bearings (b.z = 1) once
+// bearings are made unit, and generalizes naturally to any central camera.
 //
 // Cheirality is checked by default via check_cheirality(pose, b1, b2), which is
 // bearing-native: it asserts that the midpoint-triangulation parameters along
@@ -99,11 +107,12 @@ RansacStats estimate_relative_pose(const std::vector<Point2D> &points2D_1, const
 // enabled disambiguates the decomposition robustly. Set check_cheirality=false
 // only for intentional virtual-point reconstructions.
 //
-// opt.max_error is interpreted as the Sampson threshold in bearing-normalized
-// units (radians in the small-error limit — use RelativePoseOptions::SetMaxErrorFromAngle
-// to set it from an angular threshold). For pinhole bearings with b.z == 1 this
-// is the same threshold the pinhole estimate_relative_pose would use after
-// unprojection.
+// opt.max_error is interpreted as an angular threshold in radians: the bearing
+// estimator converts it internally to the residual unit (sin(angle), which
+// equals the residual magnitude in the small-error limit). For pinhole bearings
+// the bearing path is first-order equivalent to estimate_relative_pose after
+// unprojection but differs by O(error^3) since the 2D Sampson uses non-unit
+// homogeneous (x, y, 1).
 RansacStats estimate_relative_pose_bearings(const std::vector<Point3D> &bearings_1,
                                             const std::vector<Point3D> &bearings_2, const RelativePoseOptions &opt,
                                             CameraPose *relative_pose, std::vector<char> *inliers,

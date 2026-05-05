@@ -69,12 +69,15 @@ class RelativePoseEstimator {
 // Relative pose estimator for any central camera model (pinhole, spherical,
 // fisheye, ...) using 3D unit bearing vectors. For spherical cameras this
 // preserves hemisphere information that the 2D Point2D form loses; for pinhole
-// cameras it is algebraically equivalent to RelativePoseEstimator when bearings
-// come from Camera::UnprojectNormalized.
+// cameras it is first-order equivalent to RelativePoseEstimator when bearings
+// come from Camera::UnprojectNormalized — the residuals share the same minimum
+// in the noise-free limit but differ by O(error^3) since the 2D Sampson uses
+// non-unit homogeneous (x, y, 1).
 //
-// Scoring uses compute_sampson_msac_score_bearing — the (x,y)-subspace Sampson
-// error on unit bearings. For pinhole bearings with b.z == 1 this reduces to
-// the 2D Sampson form used by RelativePoseEstimator.
+// Scoring uses compute_sampson_msac_score_bearing — unit-norm symmetric Sampson
+// on the sphere:
+//   r = (b2^T E b1) / sqrt(|E b1|^2 + |E^T b2|^2)
+// the asymptotic perpendicular angular distance to the epipolar great circles.
 //
 // Cheirality is checked by default via check_cheirality(pose, b1, b2) from
 // misc/essential.cc. That check is bearing-native: it computes the midpoint
