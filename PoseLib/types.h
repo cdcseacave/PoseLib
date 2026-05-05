@@ -111,6 +111,11 @@ struct AbsolutePoseOptions {
     RansacOptions ransac;
     BundleOptions bundle;
 
+    // Inlier threshold.
+    //   * Pixel-based estimators (estimate_absolute_pose, ...): pixel error.
+    //   * Bearing-based estimator (estimate_absolute_pose_bearings):
+    //     angular threshold in radians (converted internally to chord-distance
+    //     units via chord = 2 * sin(angle / 2)).
     double max_error = 12.0;
     // For problems with multiple types of residuals, we can have different max errors for each type
     // If not set, max_error is used for all residuals
@@ -125,21 +130,18 @@ struct AbsolutePoseOptions {
     // and not on the actual image size.
     // Setting to 0 (or negative) disables checking.
     double min_fov = 5.0; // circa 500mm lens 35mm-equivalent
-
-    // Set max_error from an angular threshold in radians, as used by the
-    // bearing-vector pose estimator (estimate_absolute_pose_bearings).
-    // The bearing estimator scores with the squared chord distance
-    //   |b_obs - b_pred|^2 = 2 - 2*cos(angle)
-    // so the inlier threshold in those units is chord = 2*sin(angle/2).
-    // For small angles chord ≈ angle (the two agree to ~1e-4 at 5°).
-    inline void SetMaxErrorFromAngle(double angle_rad) { max_error = 2.0 * std::sin(0.5 * angle_rad); }
 };
 
 struct RelativePoseOptions {
     RansacOptions ransac;
     BundleOptions bundle;
 
-    // Inlier threshold
+    // Inlier threshold.
+    //   * Pixel-based estimators (estimate_relative_pose, ...): pixel error.
+    //   * Bearing-based estimator (estimate_relative_pose_bearings):
+    //     angular threshold in radians (converted internally to the unit-norm
+    //     symmetric Sampson residual unit, sin(angle), which equals the
+    //     residual magnitude in the small-error limit).
     double max_error = 1.0;
 
     // TODO: refactor estimate_relative_pose to similarly to estimate_absolute_pose have a single entry point
@@ -151,15 +153,6 @@ struct RelativePoseOptions {
     // Whether we should use real focal length checking: https://arxiv.org/abs/2311.16304
     // Assumes that principal points of both cameras are at origin.
     bool real_focal_check = false;
-
-    // Set max_error from an angular threshold in radians. The relative-pose
-    // estimators score with a Sampson error whose unit is the perpendicular
-    // distance to the epipolar line/great-circle; in the small-error limit
-    // this equals the angular distance (radians) on the unit sphere, so the
-    // helper just stores the angle directly. The 2D Sampson and the bearing-
-    // vector Sampson are consistent on this unit because for pinhole bearings
-    // (z=1) the formulas reduce to each other exactly.
-    inline void SetMaxErrorFromAngle(double angle_rad) { max_error = angle_rad; }
 };
 
 struct HybridPoseOptions {
