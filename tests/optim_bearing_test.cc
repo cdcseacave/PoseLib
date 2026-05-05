@@ -370,7 +370,7 @@ bool test_estimate_absolute_pose_bearings() {
     build_full_sphere_scene(N, pose_gt, bearings, X, "estimate_abs_bearings");
 
     AbsolutePoseOptions opt;
-    opt.max_error = 1e-4; // chord-distance (very tight since no noise)
+    opt.max_error = 1e-4; // angular threshold in radians (very tight; no noise)
     opt.ransac.max_iterations = 1000;
     opt.ransac.min_iterations = 100;
     opt.ransac.success_prob = 0.999;
@@ -399,7 +399,7 @@ bool test_estimate_relative_pose_bearings() {
     build_two_view_scene(N, pose_gt, b1, b2, "estimate_rel_bearings");
 
     RelativePoseOptions opt;
-    opt.max_error = 1e-4;
+    opt.max_error = 1e-4; // angular threshold in radians (very tight; no noise)
     opt.ransac.max_iterations = 1000;
     opt.ransac.min_iterations = 100;
     opt.ransac.success_prob = 0.999;
