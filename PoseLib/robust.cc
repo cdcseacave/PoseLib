@@ -285,8 +285,7 @@ RansacStats estimate_relative_pose_bearings(const std::vector<Point3D> &bearings
     RelativePoseOptions opt_scaled = opt;
     opt_scaled.max_error = std::sin(opt.max_error);
 
-    RansacStats stats =
-        ransac_relpose_bearing(bearings_1, bearings_2, opt_scaled, pose, inliers, check_cheirality);
+    RansacStats stats = ransac_relpose_bearing(bearings_1, bearings_2, opt_scaled, pose, inliers, check_cheirality);
 
     if (stats.num_inliers > 5) {
         // Final bundle-adjust polish over all inliers, mirroring

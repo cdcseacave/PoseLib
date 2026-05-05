@@ -512,8 +512,7 @@ bool test_pinhole_bearing_parity_absolute() {
         Eigen::Quaterniond(pose_gt.q(0), pose_gt.q(1), pose_gt.q(2), pose_gt.q(3)).conjugate();
     const double angle_err = 2.0 * std::acos(std::clamp(std::abs(q_err.w()), -1.0, 1.0));
     log_test_case("bearing_rot_err_rad", std::to_string(angle_err));
-    log_test_case("bearing_t_err",
-                  std::to_string((pose_bearing.t - pose_gt.t).norm()));
+    log_test_case("bearing_t_err", std::to_string((pose_bearing.t - pose_gt.t).norm()));
     REQUIRE_SMALL(angle_err, 1e-5);
     REQUIRE_SMALL((pose_bearing.t - pose_gt.t).norm(), 1e-5);
     return true;
