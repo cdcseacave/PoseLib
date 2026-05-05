@@ -193,10 +193,12 @@ double compute_msac_score_bearing(const CameraPose &pose, const std::vector<Poin
     return score;
 }
 
-// Bearing-vector MSAC score for relative pose using Sampson-on-the-sphere error.
-// Algebraically identical to the 2D Sampson formula with (x.x, x.y, 1) replaced by
-// the full 3D bearing. For pinhole bearings (b = (X/Z, Y/Z, 1) normalized) this
-// reduces to compute_sampson_msac_score.
+// Bearing-vector MSAC score for relative pose using unit-norm symmetric Sampson.
+// Residual: r = (b2^T E b1) / sqrt(|E b1|^2 + |E^T b2|^2) — the asymptotic
+// perpendicular angular distance to the epipolar great circles on the unit
+// sphere. Reduces to the standard 2D Sampson formula once bearings are made
+// unit; consistent with BearingRelativePoseRefiner so RANSAC scoring and LM
+// refinement minimize the same objective.
 double compute_sampson_msac_score_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings1,
                                           const std::vector<Point3D> &bearings2, double sq_threshold,
                                           size_t *inlier_count, bool check_cheirality_flag) {
@@ -213,14 +215,11 @@ double compute_sampson_msac_score_bearing(const CameraPose &pose, const std::vec
         const Eigen::Vector3d Etb2 = E.transpose() * b2;
 
         const double C = b2.dot(Eb1);
-        // Sampson denominator: use the (x, y) components only, matching the 2D path's
-        // pinhole reduction. For pinhole b.z == 1 so the Eb1(2) and Etb2(2) terms are
-        // exactly what the 2D formula drops.
-        const double Cx = Eb1(0) * Eb1(0) + Eb1(1) * Eb1(1);
-        const double Cy = Etb2(0) * Etb2(0) + Etb2(1) * Etb2(1);
-        const double denom = Cx + Cy;
+        // Unit-norm symmetric Sampson denominator: full 3-component squared norms.
+        const double denom = Eb1.squaredNorm() + Etb2.squaredNorm();
         if (denom < 1e-12) {
-            // Degenerate correspondence; final outlier term accounts for it once.
+            // Degenerate correspondence; treat as outlier so RANSAC isn't biased.
+            score += sq_threshold;
             continue;
         }
         const double r2 = C * C / denom;
@@ -272,7 +271,7 @@ void get_inliers_abs_bearing(const CameraPose &pose, const std::vector<Point3D> 
     }
 }
 
-// Bearing-vector inlier selection for relative pose (Sampson-on-the-sphere).
+// Bearing-vector inlier selection for relative pose (unit-norm symmetric Sampson).
 int get_inliers_rel_bearing(const CameraPose &pose, const std::vector<Point3D> &bearings1,
                             const std::vector<Point3D> &bearings2, double sq_threshold, std::vector<char> *inliers,
                             bool check_cheirality_flag) {
@@ -289,9 +288,7 @@ int get_inliers_rel_bearing(const CameraPose &pose, const std::vector<Point3D> &
         const Eigen::Vector3d Etb2 = E.transpose() * b2;
 
         const double C = b2.dot(Eb1);
-        const double Cx = Eb1(0) * Eb1(0) + Eb1(1) * Eb1(1);
-        const double Cy = Etb2(0) * Etb2(0) + Etb2(1) * Etb2(1);
-        const double denom = Cx + Cy;
+        const double denom = Eb1.squaredNorm() + Etb2.squaredNorm();
         if (denom < 1e-12) {
             (*inliers)[k] = 0;
             continue;
