@@ -6,6 +6,7 @@ add_executable(run_tests
     optim_bearing_test.cc
     optim_absolute_test.cc
     optim_gen_absolute_test.cc
+    gen_absolute_scale_test.cc
     optim_relative_test.cc
     optim_fundamental_test.cc
     optim_gen_relative_test.cc
