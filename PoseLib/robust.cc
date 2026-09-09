@@ -217,6 +217,120 @@ RansacStats estimate_generalized_absolute_pose(const std::vector<std::vector<Poi
     return stats;
 }
 
+RansacStats estimate_generalized_absolute_pose_scale(const std::vector<std::vector<Point2D>> &points2D,
+                                                     const std::vector<std::vector<Point3D>> &points3D,
+                                                     const std::vector<CameraPose> &camera_ext,
+                                                     const std::vector<Camera> &cameras, const AbsolutePoseOptions &opt,
+                                                     CameraPose *pose, double *scale,
+                                                     std::vector<std::vector<char>> *inliers) {
+
+    const size_t num_cams = cameras.size();
+    AbsolutePoseOptions opt_scaled = opt;
+
+    // Normalize image points for the RANSAC
+    std::vector<std::vector<Point2D>> points2D_calib;
+    points2D_calib.resize(num_cams);
+    double scaled_threshold = 0;
+    size_t total_num_pts = 0;
+    for (size_t cam_k = 0; cam_k < num_cams; ++cam_k) {
+        const size_t pts = points2D[cam_k].size();
+        points2D_calib[cam_k].resize(pts);
+        for (size_t pt_k = 0; pt_k < pts; ++pt_k) {
+            cameras[cam_k].unproject(points2D[cam_k][pt_k], &points2D_calib[cam_k][pt_k]);
+        }
+        total_num_pts += pts;
+        scaled_threshold += (opt.max_error * pts) / cameras[cam_k].focal();
+    }
+    scaled_threshold /= static_cast<double>(total_num_pts);
+
+    // TODO allow per-camera thresholds
+    opt_scaled.max_error = scaled_threshold;
+
+    // pose and scale are only read back as the initial model, see RansacOptions
+    ScaledCameraPose scaled_pose;
+    if (opt.ransac.score_initial_model) {
+        scaled_pose = ScaledCameraPose(*pose, *scale);
+    }
+    RansacStats stats = ransac_gen_pnp_scale(points2D_calib, points3D, camera_ext, opt_scaled, &scaled_pose, inliers);
+
+    if (stats.num_inliers > 4) {
+        // Collect inlier for additional bundle adjustment
+        std::vector<std::vector<Point2D>> points2D_inliers;
+        std::vector<std::vector<Point3D>> points3D_inliers;
+        points2D_inliers.resize(num_cams);
+        points3D_inliers.resize(num_cams);
+
+        for (size_t cam_k = 0; cam_k < num_cams; ++cam_k) {
+            const size_t pts = points2D[cam_k].size();
+            points2D_inliers[cam_k].reserve(pts);
+            points3D_inliers[cam_k].reserve(pts);
+
+            for (size_t pt_k = 0; pt_k < pts; ++pt_k) {
+                if (!(*inliers)[cam_k][pt_k])
+                    continue;
+                points2D_inliers[cam_k].push_back(points2D[cam_k][pt_k]);
+                points3D_inliers[cam_k].push_back(points3D[cam_k][pt_k]);
+            }
+        }
+
+        generalized_bundle_adjust(points2D_inliers, points3D_inliers, camera_ext, cameras, &scaled_pose, opt.bundle);
+    }
+
+    *pose = scaled_pose.pose;
+    *scale = scaled_pose.scale;
+
+    return stats;
+}
+
+RansacStats estimate_generalized_absolute_pose_scale_bearings(const std::vector<std::vector<Point3D>> &bearings,
+                                                              const std::vector<std::vector<Point3D>> &points3D,
+                                                              const std::vector<CameraPose> &camera_ext,
+                                                              const AbsolutePoseOptions &opt, CameraPose *pose,
+                                                              double *scale, std::vector<std::vector<char>> *inliers) {
+    // opt.max_error is an angular threshold in radians which we convert once here to the
+    // squared chord distance used downstream, see estimate_absolute_pose_bearings.
+    const size_t num_cams = bearings.size();
+    AbsolutePoseOptions opt_scaled = opt;
+    opt_scaled.max_error = 2.0 * std::sin(0.5 * opt.max_error);
+
+    // pose and scale are only read back as the initial model, see RansacOptions
+    ScaledCameraPose scaled_pose;
+    if (opt.ransac.score_initial_model) {
+        scaled_pose = ScaledCameraPose(*pose, *scale);
+    }
+    RansacStats stats = ransac_gen_pnp_scale_bearing(bearings, points3D, camera_ext, opt_scaled, &scaled_pose, inliers);
+
+    if (stats.num_inliers > 4) {
+        // Collect inlier for additional bundle adjustment
+        std::vector<std::vector<Point3D>> bearings_inliers;
+        std::vector<std::vector<Point3D>> points3D_inliers;
+        bearings_inliers.resize(num_cams);
+        points3D_inliers.resize(num_cams);
+
+        for (size_t cam_k = 0; cam_k < num_cams; ++cam_k) {
+            const size_t pts = bearings[cam_k].size();
+            bearings_inliers[cam_k].reserve(pts);
+            points3D_inliers[cam_k].reserve(pts);
+
+            for (size_t pt_k = 0; pt_k < pts; ++pt_k) {
+                if (!(*inliers)[cam_k][pt_k])
+                    continue;
+                bearings_inliers[cam_k].push_back(bearings[cam_k][pt_k]);
+                points3D_inliers[cam_k].push_back(points3D[cam_k][pt_k]);
+            }
+        }
+
+        BundleOptions bundle_opt = opt_scaled.bundle;
+        bundle_opt.loss_scale = opt_scaled.max_error;
+        generalized_bundle_adjust_bearing(bearings_inliers, points3D_inliers, camera_ext, &scaled_pose, bundle_opt);
+    }
+
+    *pose = scaled_pose.pose;
+    *scale = scaled_pose.scale;
+
+    return stats;
+}
+
 RansacStats estimate_absolute_pose_pnpl(const std::vector<Point2D> &points2D, const std::vector<Point3D> &points3D,
                                         const std::vector<Line2D> &lines2D, const std::vector<Line3D> &lines3D,
                                         const Camera &camera, const AbsolutePoseOptions &opt, CameraPose *pose,

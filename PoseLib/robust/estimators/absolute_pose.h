@@ -242,6 +242,86 @@ class GeneralizedAbsolutePoseEstimator {
     std::vector<std::pair<size_t, size_t>> sample;
 };
 
+// Generalized absolute pose estimator for a rig whose internal scale is unknown w.r.t. the
+// 3D points, e.g. when the rig and the points come from two independent reconstructions.
+// Models are generated with gp4ps and scored with the reprojection error of each rig camera
+// with the rig centers scaled by the scale of the model, i.e. with the same threshold
+// semantics as GeneralizedAbsolutePoseEstimator.
+//
+// The scale is only observable from correspondences seen from at least two distinct rig
+// centers (with a single center the term scale * p is absorbed by the translation), so the
+// minimal samples are drawn to span two centers. If the rig cannot constrain the scale at
+// all we report no data, such that RANSAC returns without a model instead of an arbitrary
+// scale.
+class GeneralizedAbsolutePoseScaleEstimator {
+  public:
+    GeneralizedAbsolutePoseScaleEstimator(const AbsolutePoseOptions &opt,
+                                          const std::vector<std::vector<Point2D>> &points2D,
+                                          const std::vector<std::vector<Point3D>> &points3D,
+                                          const std::vector<CameraPose> &camera_ext);
+
+    void generate_models(std::vector<ScaledCameraPose> *models);
+    double score_model(const ScaledCameraPose &scaled_pose, size_t *inlier_count) const;
+    void refine_model(ScaledCameraPose *scaled_pose) const;
+
+    const size_t sample_sz = 4;
+    size_t num_data;
+    const size_t num_cams;
+
+  private:
+    const AbsolutePoseOptions &opt;
+    const std::vector<std::vector<Point2D>> &x;
+    const std::vector<std::vector<Point3D>> &X;
+    const std::vector<CameraPose> &rig_poses;
+    std::vector<Point3D> camera_centers;
+    std::vector<size_t> center_group;   // rig cameras which share a center
+    std::vector<size_t> num_pts_camera; // number of points in each camera
+
+    RNG_t rng;
+    // pre-allocated vectors for sampling
+    std::vector<Point3D> ps, xs, Xs;
+    std::vector<std::pair<size_t, size_t>> sample;
+    std::vector<CameraPose> sample_poses;
+    std::vector<double> sample_scales;
+};
+
+// Generalized absolute pose and scale estimator for any central camera model (pinhole,
+// spherical, fisheye, ...) using 3D unit bearing vectors instead of 2D normalized pixels,
+// see BearingAbsolutePoseEstimator. Scoring is the squared chord distance between the
+// observed and the predicted unit bearings, and opt.max_error is taken as an angular
+// threshold in radians converted internally to chord = 2 * sin(angle / 2).
+class BearingGeneralizedAbsolutePoseScaleEstimator {
+  public:
+    BearingGeneralizedAbsolutePoseScaleEstimator(const AbsolutePoseOptions &opt,
+                                                 const std::vector<std::vector<Point3D>> &bearings,
+                                                 const std::vector<std::vector<Point3D>> &points3D,
+                                                 const std::vector<CameraPose> &camera_ext);
+
+    void generate_models(std::vector<ScaledCameraPose> *models);
+    double score_model(const ScaledCameraPose &scaled_pose, size_t *inlier_count) const;
+    void refine_model(ScaledCameraPose *scaled_pose) const;
+
+    const size_t sample_sz = 4;
+    size_t num_data;
+    const size_t num_cams;
+
+  private:
+    const AbsolutePoseOptions &opt;
+    const std::vector<std::vector<Point3D>> &b;
+    const std::vector<std::vector<Point3D>> &X;
+    const std::vector<CameraPose> &rig_poses;
+    std::vector<Point3D> camera_centers;
+    std::vector<size_t> center_group;   // rig cameras which share a center
+    std::vector<size_t> num_pts_camera; // number of points in each camera
+
+    RNG_t rng;
+    // pre-allocated vectors for sampling
+    std::vector<Point3D> ps, xs, Xs;
+    std::vector<std::pair<size_t, size_t>> sample;
+    std::vector<CameraPose> sample_poses;
+    std::vector<double> sample_scales;
+};
+
 class AbsolutePosePointLineEstimator {
   public:
     AbsolutePosePointLineEstimator(const AbsolutePoseOptions &opt, const std::vector<Point2D> &x,

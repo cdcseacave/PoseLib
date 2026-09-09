@@ -72,6 +72,39 @@ RansacStats estimate_generalized_absolute_pose(const std::vector<std::vector<Poi
                                                const std::vector<Camera> &cameras, const AbsolutePoseOptions &opt,
                                                CameraPose *pose, std::vector<std::vector<char>> *inliers);
 
+// Estimates generalized absolute pose and the scale of the rig w.r.t. the 3D points using
+// LO-RANSAC followed by non-linear refinement. This is the estimator to use when the rig and
+// the 3D points come from two independent reconstructions, i.e. when the size of the rig is
+// only known up to an unknown factor: the rig cameras are placed at scale * center.
+// Threshold for reprojection error is set by RansacOptions.max_reproj_error, with the same
+// semantics as estimate_generalized_absolute_pose.
+//
+// The scale is only observable from correspondences seen from at least two distinct rig
+// centers. If the rig cannot constrain the scale (a single camera, or a purely rotating rig)
+// no model is returned, i.e. the returned statistics hold zero inliers.
+RansacStats estimate_generalized_absolute_pose_scale(const std::vector<std::vector<Point2D>> &points2D,
+                                                     const std::vector<std::vector<Point3D>> &points3D,
+                                                     const std::vector<CameraPose> &camera_ext,
+                                                     const std::vector<Camera> &cameras, const AbsolutePoseOptions &opt,
+                                                     CameraPose *pose, double *scale,
+                                                     std::vector<std::vector<char>> *inliers);
+
+// Estimates generalized absolute pose and scale from 3D unit bearing vectors (any central
+// camera model: pinhole, spherical / equirectangular, fisheye, ...). The bearings are given
+// in the coordinate system of the rig camera which observed them. Scoring is chord-distance
+// squared on the unit sphere, exactly as for estimate_absolute_pose_bearings, and cheirality
+// is enforced bearing-natively as b_pred . b_obs > 0.
+//
+// opt.max_error is interpreted as an angular threshold in radians: the bearing estimator
+// converts it internally to the chord-distance units used by the scorer. For pinhole bearings
+// this path is first-order equivalent to estimate_generalized_absolute_pose_scale when the
+// bearings come from normalize((X/Z, Y/Z, 1)), but the two objectives differ by O(error^3).
+RansacStats estimate_generalized_absolute_pose_scale_bearings(const std::vector<std::vector<Point3D>> &bearings,
+                                                              const std::vector<std::vector<Point3D>> &points3D,
+                                                              const std::vector<CameraPose> &camera_ext,
+                                                              const AbsolutePoseOptions &opt, CameraPose *pose,
+                                                              double *scale, std::vector<std::vector<char>> *inliers);
+
 // Estimates absolute pose using LO-RANSAC followed by non-linear refinement
 // using both 2D-3D point and line matches
 // Note that line segments are described by their endpoints

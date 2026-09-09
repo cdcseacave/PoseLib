@@ -128,6 +128,49 @@ RansacStats ransac_gen_pnp(const std::vector<std::vector<Point2D>> &x, const std
     return stats;
 }
 
+RansacStats ransac_gen_pnp_scale(const std::vector<std::vector<Point2D>> &x, const std::vector<std::vector<Point3D>> &X,
+                                 const std::vector<CameraPose> &camera_ext, const AbsolutePoseOptions &opt,
+                                 ScaledCameraPose *best_model, std::vector<std::vector<char>> *best_inliers) {
+    if (!opt.ransac.score_initial_model) {
+        best_model->pose.q << 1.0, 0.0, 0.0, 0.0;
+        best_model->pose.t.setZero();
+        best_model->scale = 1.0;
+    }
+    GeneralizedAbsolutePoseScaleEstimator estimator(opt, x, X, camera_ext);
+    RansacStats stats =
+        ransac<GeneralizedAbsolutePoseScaleEstimator, ScaledCameraPose>(estimator, opt.ransac, best_model);
+
+    best_inliers->resize(camera_ext.size());
+    for (size_t k = 0; k < camera_ext.size(); ++k) {
+        get_inliers(best_model->camera_pose(camera_ext[k]), x[k], X[k], opt.max_error * opt.max_error,
+                    &(*best_inliers)[k]);
+    }
+
+    return stats;
+}
+
+RansacStats ransac_gen_pnp_scale_bearing(const std::vector<std::vector<Point3D>> &bearings,
+                                         const std::vector<std::vector<Point3D>> &X,
+                                         const std::vector<CameraPose> &camera_ext, const AbsolutePoseOptions &opt,
+                                         ScaledCameraPose *best_model, std::vector<std::vector<char>> *best_inliers) {
+    if (!opt.ransac.score_initial_model) {
+        best_model->pose.q << 1.0, 0.0, 0.0, 0.0;
+        best_model->pose.t.setZero();
+        best_model->scale = 1.0;
+    }
+    BearingGeneralizedAbsolutePoseScaleEstimator estimator(opt, bearings, X, camera_ext);
+    RansacStats stats =
+        ransac<BearingGeneralizedAbsolutePoseScaleEstimator, ScaledCameraPose>(estimator, opt.ransac, best_model);
+
+    best_inliers->resize(camera_ext.size());
+    for (size_t k = 0; k < camera_ext.size(); ++k) {
+        get_inliers_abs_bearing(best_model->camera_pose(camera_ext[k]), bearings[k], X[k],
+                                opt.max_error * opt.max_error, &(*best_inliers)[k]);
+    }
+
+    return stats;
+}
+
 RansacStats ransac_pnpl(const std::vector<Point2D> &points2D, const std::vector<Point3D> &points3D,
                         const std::vector<Line2D> &lines2D, const std::vector<Line3D> &lines3D,
                         const AbsolutePoseOptions &opt, CameraPose *best_model, std::vector<char> *inliers_points,
