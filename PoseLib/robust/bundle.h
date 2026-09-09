@@ -105,6 +105,32 @@ generalized_bundle_adjust(const std::vector<std::vector<Point2D>> &x, const std:
                           CameraPose *pose, const BundleOptions &opt = BundleOptions(),
                           const std::vector<std::vector<double>> &weights = std::vector<std::vector<double>>());
 
+// Minimizes reprojection error over the rig pose and the scale of the rig centers w.r.t. the
+// 3D points. Assumes identity intrinsics (calibrated camera)
+BundleStats
+generalized_bundle_adjust(const std::vector<std::vector<Point2D>> &x, const std::vector<std::vector<Point3D>> &X,
+                          const std::vector<CameraPose> &camera_ext, ScaledCameraPose *pose,
+                          const BundleOptions &opt = BundleOptions(),
+                          const std::vector<std::vector<double>> &weights = std::vector<std::vector<double>>());
+
+// Uses intrinsic calibration from Camera (see colmap_models.h)
+// Slightly slower than generalized_bundle_adjust above
+BundleStats
+generalized_bundle_adjust(const std::vector<std::vector<Point2D>> &x, const std::vector<std::vector<Point3D>> &X,
+                          const std::vector<CameraPose> &camera_ext, const std::vector<Camera> &cameras,
+                          ScaledCameraPose *pose, const BundleOptions &opt = BundleOptions(),
+                          const std::vector<std::vector<double>> &weights = std::vector<std::vector<double>>());
+
+// Generalized absolute pose and scale refinement for any central camera model (pinhole,
+// spherical, fisheye, ...) using 3D unit bearing vectors instead of 2D normalized pixels.
+// Minimizes the chord distance on the unit sphere; see bundle_adjust_bearing for how this
+// relates to the pixel-plane reprojection error minimized by generalized_bundle_adjust.
+BundleStats
+generalized_bundle_adjust_bearing(const std::vector<std::vector<Point3D>> &bearings,
+                                  const std::vector<std::vector<Point3D>> &X, const std::vector<CameraPose> &camera_ext,
+                                  ScaledCameraPose *pose, const BundleOptions &opt = BundleOptions(),
+                                  const std::vector<std::vector<double>> &weights = std::vector<std::vector<double>>());
+
 // Relative pose refinement. Minimizes Sampson error error. Assumes identity intrinsics (calibrated camera)
 BundleStats refine_relpose(const std::vector<Point2D> &x1, const std::vector<Point2D> &x2, CameraPose *pose,
                            const BundleOptions &opt = BundleOptions(),
