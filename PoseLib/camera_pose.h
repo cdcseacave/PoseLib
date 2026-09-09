@@ -106,9 +106,14 @@ struct alignas(32) MonoDepthTwoViewGeometry {
 };
 
 // Pose of a generalized camera whose internal scale is unknown relative to the 3D points,
-// i.e. the rig is only known up to the scale of its camera centers (see gp4ps.h)
+// i.e. the rig is only known up to the scale of its camera centers. This is exactly the
+// parameterization solved for by gp4ps (see gp4ps.h)
 //     scale * p + lambda * x = R * X + t
-// where p is the camera center and x the bearing, both in the rig coordinate system.
+// where p is the camera center and x the bearing, both in the rig coordinate system, so pose
+// and scale can be taken straight from that solver. Equivalently, a 3D point X is seen by the
+// rig camera with extrinsics (Rk, tk) at
+//     Z = Rk * (R * X + t) + scale * tk
+// i.e. the rig center p = -Rk' * tk sits at scale * p in the frame the 3D points live in.
 struct alignas(32) ScaledCameraPose {
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 

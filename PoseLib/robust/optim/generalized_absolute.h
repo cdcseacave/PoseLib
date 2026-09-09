@@ -181,8 +181,8 @@ class GeneralizedAbsolutePoseScaleRefiner : public RefinerBase<ScaledCameraPose,
                 continue;
             }
             Image full_pose(scaled_pose.camera_pose(rig_poses[k]), cameras[k]);
-            // Rk * (R*X + t) + scale * tk
-            // d/d(scale) is the derivative w.r.t. a translation along -R'*Rk'*tk
+            // Z = Rk * (R*X + t) + scale * tk, so d/d(scale) is the derivative w.r.t. a
+            // translation of the rig pose along R'*Rk'*tk = -R'*center
             scale_acc.set_target(&acc, -scaled_pose.pose.derotate(rig_poses[k].center()));
             AbsolutePoseRefiner<typename ResidualWeightVectors::value_type, ScaleColumnAccumulator<Accumulator>>
                 cam_refiner(x[k], X[k], {}, weights[k]);
@@ -240,6 +240,7 @@ class BearingGeneralizedAbsolutePoseScaleRefiner : public RefinerBase<ScaledCame
             if (b[k].size() == 0) {
                 continue;
             }
+            // Same scale column as in GeneralizedAbsolutePoseScaleRefiner above
             scale_acc.set_target(&acc, -scaled_pose.pose.derotate(rig_poses[k].center()));
             BearingAbsolutePoseRefiner<typename ResidualWeightVectors::value_type, ScaleColumnAccumulator<Accumulator>>
                 cam_refiner(b[k], X[k], weights[k]);
