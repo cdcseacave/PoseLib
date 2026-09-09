@@ -128,16 +128,31 @@ void draw_sample_distinct_centers(size_t sample_sz, const std::vector<size_t> &N
     }
 
     // The sample degenerated to a single center, so we redraw its last element among the
-    // cameras which do not share that center. This cannot collide with the other elements
+    // cameras which do not share that center, uniformly over those cameras and then over
+    // their observations, as draw_sample does. This cannot collide with the other elements
     // of the sample since it comes from a different camera.
-    std::pair<size_t, size_t> &last = (*sample)[sample_sz - 1];
-    while (true) {
-        last.first = random_int(rng) % N.size();
-        if (N[last.first] == 0 || center_group[last.first] == group) {
+    size_t num_eligible = 0;
+    for (size_t k = 0; k < N.size(); ++k) {
+        if (N[k] > 0 && center_group[k] != group) {
+            num_eligible++;
+        }
+    }
+    if (num_eligible == 0) {
+        // No second center holds observations, so no sample can constrain the scale. We
+        // leave the degenerate sample in place and let the caller reject the models it
+        // generates; GeneralizedAbsolutePoseScaleEstimator rules this case out up front.
+        return;
+    }
+
+    size_t pick = random_int(rng) % num_eligible;
+    for (size_t k = 0; k < N.size(); ++k) {
+        if (N[k] == 0 || center_group[k] == group) {
             continue;
         }
-        last.second = random_int(rng) % N[last.first];
-        return;
+        if (pick-- == 0) {
+            (*sample)[sample_sz - 1] = {k, random_int(rng) % N[k]};
+            return;
+        }
     }
 }
 

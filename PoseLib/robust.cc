@@ -241,6 +241,10 @@ RansacStats estimate_generalized_absolute_pose_scale(const std::vector<std::vect
         total_num_pts += pts;
         scaled_threshold += (opt.max_error * pts) / cameras[cam_k].focal();
     }
+    if (total_num_pts == 0) {
+        inliers->assign(num_cams, {});
+        return RansacStats();
+    }
     scaled_threshold /= static_cast<double>(total_num_pts);
 
     // TODO allow per-camera thresholds

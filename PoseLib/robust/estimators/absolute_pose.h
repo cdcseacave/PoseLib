@@ -251,8 +251,8 @@ class GeneralizedAbsolutePoseEstimator {
 // The scale is only observable from correspondences seen from at least two distinct rig
 // centers (with a single center the term scale * p is absorbed by the translation), so the
 // minimal samples are drawn to span two centers. If the rig cannot constrain the scale at
-// all we report no data, such that RANSAC returns without a model instead of an arbitrary
-// scale.
+// all, num_data is reported as zero even when correspondences exist, such that RANSAC
+// returns without a model instead of an arbitrary scale.
 class GeneralizedAbsolutePoseScaleEstimator {
   public:
     GeneralizedAbsolutePoseScaleEstimator(const AbsolutePoseOptions &opt,

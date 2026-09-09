@@ -53,7 +53,8 @@ size_t group_camera_centers(const std::vector<Point3D> &camera_centers, std::vec
 // Sampling for multi-camera systems where the sample has to span at least two camera centers,
 // e.g. for the generalized absolute pose and scale problem where the scale is unobservable
 // from a single center. center_group is the grouping returned by group_camera_centers.
-// (NOTE: This assumes that two groups have observations but does not check it!)
+// If no two groups hold observations no sample can span two centers, and an ordinary sample
+// is returned instead; the caller is responsible for rejecting that case.
 void draw_sample_distinct_centers(size_t sample_sz, const std::vector<size_t> &N,
                                   const std::vector<size_t> &center_group,
                                   std::vector<std::pair<size_t, size_t>> *sample, RNG_t &rng);
