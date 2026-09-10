@@ -88,7 +88,8 @@ RansacStats estimate_generalized_absolute_pose(const std::vector<std::vector<Poi
 //
 // The scale is only observable from correspondences seen from at least two distinct rig
 // centers. If the rig cannot constrain the scale (a single camera, or a purely rotating rig)
-// no model is returned, i.e. the returned statistics hold zero inliers and scale is untouched.
+// no model is returned: the returned statistics hold zero inliers, and pose and scale are
+// left untouched, as they are whenever no model is found.
 RansacStats estimate_generalized_absolute_pose_scale(const std::vector<std::vector<Point2D>> &points2D,
                                                      const std::vector<std::vector<Point3D>> &points3D,
                                                      const std::vector<CameraPose> &camera_ext,

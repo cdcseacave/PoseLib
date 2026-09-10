@@ -256,6 +256,10 @@ RansacStats estimate_generalized_absolute_pose_scale(const std::vector<std::vect
         scaled_pose = ScaledCameraPose(*pose, *scale);
     }
     RansacStats stats = ransac_gen_pnp_scale(points2D_calib, points3D, camera_ext, opt_scaled, &scaled_pose, inliers);
+    if (stats.num_inliers == 0) {
+        // No model, in particular when the rig cannot constrain the scale: leave the outputs untouched
+        return stats;
+    }
 
     if (stats.num_inliers > 4) {
         // Collect inlier for additional bundle adjustment
@@ -303,6 +307,10 @@ RansacStats estimate_generalized_absolute_pose_scale_bearings(const std::vector<
         scaled_pose = ScaledCameraPose(*pose, *scale);
     }
     RansacStats stats = ransac_gen_pnp_scale_bearing(bearings, points3D, camera_ext, opt_scaled, &scaled_pose, inliers);
+    if (stats.num_inliers == 0) {
+        // No model, in particular when the rig cannot constrain the scale: leave the outputs untouched
+        return stats;
+    }
 
     if (stats.num_inliers > 4) {
         // Collect inlier for additional bundle adjustment

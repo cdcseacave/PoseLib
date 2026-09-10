@@ -715,6 +715,35 @@ bool test_gen_absolute_pose_scale_outliers() {
     return true;
 }
 
+// Runs both entry points on a rig which cannot constrain the scale and checks that no model
+// is returned: zero inliers, and the pose and scale the caller passed in are left untouched.
+bool degenerate_rig_returns_no_model(const Scene &scene, const AbsolutePoseOptions &opt, const std::string &name) {
+    const CameraPose untouched_pose = rig_pose();
+    const double untouched_scale = 0.37;
+
+    CameraPose pose = untouched_pose;
+    double scale = untouched_scale;
+    std::vector<std::vector<char>> inliers;
+    RansacStats stats = estimate_generalized_absolute_pose_scale(scene.x, scene.X, scene.camera_ext, scene.cameras, opt,
+                                                                 &pose, &scale, &inliers);
+    REQUIRE_EQ_M(stats.num_inliers, size_t(0), name);
+    REQUIRE_EQ_M(scale, untouched_scale, name);
+    REQUIRE_EQ_M((pose.q - untouched_pose.q).norm() + (pose.t - untouched_pose.t).norm(), 0.0, name);
+
+    // The bearing entry point takes an angular threshold
+    AbsolutePoseOptions opt_bearings = opt;
+    opt_bearings.max_error = opt.max_error / scene.cameras[0].focal();
+    pose = untouched_pose;
+    scale = untouched_scale;
+    stats = estimate_generalized_absolute_pose_scale_bearings(scene_bearings(scene), scene.X, scene.camera_ext,
+                                                              opt_bearings, &pose, &scale, &inliers);
+    REQUIRE_EQ_M(stats.num_inliers, size_t(0), name + " bearings");
+    REQUIRE_EQ_M(scale, untouched_scale, name + " bearings");
+    REQUIRE_EQ_M((pose.q - untouched_pose.q).norm() + (pose.t - untouched_pose.t).norm(), 0.0, name + " bearings");
+
+    return true;
+}
+
 bool test_gen_absolute_pose_scale_degenerate_rig() {
     const size_t N = 30;
 
@@ -728,32 +757,13 @@ bool test_gen_absolute_pose_scale_degenerate_rig() {
     opt.ransac.max_iterations = 1000;
 
     // A single camera cannot constrain the scale: scale * p is absorbed by the translation
-    {
-        Scene scene = setup_scene(rig_extrinsics(1), N, 2.4, camera, "gen_absolute_pose_scale_single_camera");
-
-        CameraPose pose;
-        double scale = 1.0;
-        std::vector<std::vector<char>> inliers;
-        RansacStats stats = estimate_generalized_absolute_pose_scale(scene.x, scene.X, scene.camera_ext, scene.cameras,
-                                                                     opt, &pose, &scale, &inliers);
-
-        REQUIRE_EQ_M(stats.num_inliers, size_t(0), std::string("single camera"));
-        REQUIRE_EQ_M(scale, 1.0, std::string("single camera"));
-    }
+    REQUIRE(degenerate_rig_returns_no_model(
+        setup_scene(rig_extrinsics(1), N, 2.4, camera, "gen_absolute_pose_scale_single_camera"), opt, "single camera"));
 
     // Neither can a rig which only rotates around a single center
-    {
-        Scene scene = setup_scene(rotating_rig_extrinsics(3), N, 2.4, camera, "gen_absolute_pose_scale_rotating_rig");
-
-        CameraPose pose;
-        double scale = 1.0;
-        std::vector<std::vector<char>> inliers;
-        RansacStats stats = estimate_generalized_absolute_pose_scale(scene.x, scene.X, scene.camera_ext, scene.cameras,
-                                                                     opt, &pose, &scale, &inliers);
-
-        REQUIRE_EQ_M(stats.num_inliers, size_t(0), std::string("rotating rig"));
-        REQUIRE_EQ_M(scale, 1.0, std::string("rotating rig"));
-    }
+    REQUIRE(degenerate_rig_returns_no_model(
+        setup_scene(rotating_rig_extrinsics(3), N, 2.4, camera, "gen_absolute_pose_scale_rotating_rig"), opt,
+        "rotating rig"));
 
     // Two distinct centers are enough, even if one of them holds a single observation
     {
