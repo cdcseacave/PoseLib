@@ -30,6 +30,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace poselib {
 
@@ -90,13 +91,21 @@ size_t group_camera_centers(const std::vector<Point3D> &camera_centers, std::vec
         return 0;
     }
 
-    // Centers which differ by less than this fraction of the extent of the rig are
-    // treated as coinciding
+    // Centers which differ by less than this fraction of the extent of the rig, i.e. of the
+    // largest distance between two of its centers, are treated as coinciding. A rig which only
+    // rotates about one center has no extent, and its centers then agree only up to the
+    // rounding of -R' * t, so the tolerance is floored relative to the magnitude of the centers:
+    // well above that rounding, and far below any baseline the scale could be observed from.
     double extent = 0.0;
+    double magnitude = 0.0;
     for (size_t k = 0; k < num_cams; ++k) {
-        extent = std::max(extent, (camera_centers[k] - camera_centers[0]).norm());
+        magnitude = std::max(magnitude, camera_centers[k].norm());
+        for (size_t j = 0; j < k; ++j) {
+            extent = std::max(extent, (camera_centers[k] - camera_centers[j]).norm());
+        }
     }
-    const double sq_tol = 1e-12 * extent * extent;
+    const double tol = std::max(1e-6 * extent, 1e3 * std::numeric_limits<double>::epsilon() * magnitude);
+    const double sq_tol = tol * tol;
 
     size_t num_groups = 0;
     for (size_t k = 0; k < num_cams; ++k) {

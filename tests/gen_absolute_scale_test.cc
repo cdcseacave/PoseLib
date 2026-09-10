@@ -41,13 +41,16 @@ std::vector<CameraPose> rig_extrinsics(size_t num_cams) {
     return camera_ext;
 }
 
-// Rig which only rotates around a single center, i.e. which cannot constrain the scale.
-std::vector<CameraPose> rotating_rig_extrinsics(size_t num_cams) {
+// Rig which only rotates around a single center, i.e. which cannot constrain the scale. With a
+// center away from the origin the camera centers -Rk' * tk recovered from the extrinsics agree
+// only up to rounding.
+std::vector<CameraPose> rotating_rig_extrinsics(size_t num_cams,
+                                                const Eigen::Vector3d &center = Eigen::Vector3d::Zero()) {
     std::vector<CameraPose> camera_ext;
     for (size_t k = 0; k < num_cams; ++k) {
         const Eigen::Matrix3d R =
             Eigen::AngleAxisd(0.9 * static_cast<double>(k), Eigen::Vector3d::UnitY()).toRotationMatrix();
-        camera_ext.emplace_back(R, Eigen::Vector3d::Zero());
+        camera_ext.emplace_back(R, -R * center);
     }
     return camera_ext;
 }
@@ -765,6 +768,12 @@ bool test_gen_absolute_pose_scale_degenerate_rig() {
         setup_scene(rotating_rig_extrinsics(3), N, 2.4, camera, "gen_absolute_pose_scale_rotating_rig"), opt,
         "rotating rig"));
 
+    // Nor when that center lies away from the origin, so that the centers recovered from the
+    // extrinsics agree only up to rounding
+    REQUIRE(degenerate_rig_returns_no_model(setup_scene(rotating_rig_extrinsics(3, Eigen::Vector3d(0.3, -0.2, 0.5)), N,
+                                                        2.4, camera, "gen_absolute_pose_scale_offset_rotating_rig"),
+                                            opt, "offset rotating rig"));
+
     // Two distinct centers are enough, even if one of them holds a single observation
     {
         Scene scene = setup_scene(rig_extrinsics(2), N, 2.4, camera, "gen_absolute_pose_scale_two_cameras");
@@ -813,6 +822,16 @@ bool test_draw_sample_distinct_centers() {
     REQUIRE_EQ(group_camera_centers(camera_centers, &groups), size_t(2));
     REQUIRE_EQ(groups[0], groups[2]);
     REQUIRE(groups[0] != groups[1]);
+
+    // So are centers which agree only up to rounding: a rig rotating about a center away from
+    // the origin recovers that center from -R' * t with a few ulps of noise, which must not
+    // pass for a baseline
+    std::vector<Point3D> rounded_centers;
+    for (const CameraPose &ext : rotating_rig_extrinsics(3, Eigen::Vector3d(0.3, -0.2, 0.5))) {
+        rounded_centers.push_back(ext.center());
+    }
+    rounded_centers[1] += 1e-15 * Eigen::Vector3d(1.0, -1.0, 1.0);
+    REQUIRE_EQ(group_camera_centers(rounded_centers, &groups), size_t(1));
 
     // A second center without observations leaves no sample which spans two centers, and the
     // sampler has to return an ordinary sample rather than search for one forever

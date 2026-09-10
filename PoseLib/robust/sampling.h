@@ -46,8 +46,10 @@ void draw_sample(size_t sample_sz, size_t N, std::vector<size_t> *sample, RNG_t 
 void draw_sample(size_t sample_sz, const std::vector<size_t> &N, std::vector<std::pair<size_t, size_t>> *sample,
                  RNG_t &rng);
 
-// Groups the cameras of a rig by their center. Cameras whose centers coincide (up to a
-// relative tolerance) get the same group index. Returns the number of distinct centers.
+// Groups the cameras of a rig by their center. Cameras whose centers coincide get the same
+// group index; the tolerance is relative to the extent of the rig, floored by the rounding of
+// the centers so that a rig which only rotates about one center forms a single group.
+// Returns the number of distinct centers.
 size_t group_camera_centers(const std::vector<Point3D> &camera_centers, std::vector<size_t> *center_group);
 
 // Sampling for multi-camera systems where the sample has to span at least two camera centers,
