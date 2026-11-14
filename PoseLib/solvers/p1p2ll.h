@@ -36,8 +36,10 @@
 namespace poselib {
 
 // Solves for camera pose such that: l'*(R*(X+mu*V)+t) = 0 and lambda*xp = R*Xp + t
-// Relies on the E3Q3 solver from
-//    Kukelova et al., Efficient Intersection of Three Quadrics and Applications in Computer Vision, CVPR 2016
+// Uses the degree reduction of Hruby, Duff, and Pollefeys,
+// Efficient Solution of Point-Line Absolute Pose, 2024. Solves a cubic and quadratics.
+// Returns at most 4 real poses with strictly positive depth on every point ray.
+// Infinite-line anchors are not subject to a depth constraint.
 int p1p2ll(const std::vector<Eigen::Vector3d> &xp, const std::vector<Eigen::Vector3d> &Xp,
            const std::vector<Eigen::Vector3d> &l, const std::vector<Eigen::Vector3d> &X,
            const std::vector<Eigen::Vector3d> &V, std::vector<CameraPose> *output);

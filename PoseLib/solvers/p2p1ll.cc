@@ -28,61 +28,92 @@
 
 #include "p2p1ll.h"
 
-#include "PoseLib/misc/re3q3.h"
+#include "PoseLib/misc/decompositions.h"
+#include "PoseLib/misc/univariate.h"
 
 namespace poselib {
 
 int p2p1ll(const std::vector<Eigen::Vector3d> &xp, const std::vector<Eigen::Vector3d> &Xp,
            const std::vector<Eigen::Vector3d> &l, const std::vector<Eigen::Vector3d> &X,
            const std::vector<Eigen::Vector3d> &V, std::vector<CameraPose> *output) {
-
-    // By some calculation we get that
-    //   x2 ~ [(l'*x1)*kron(Xp2'-Xp1',I_3) - x1 * kron(X-Xp1,l')] * R(:)
-    // From this we can extract two constraints on the rotation + the constraint l'*R*V = 0
-
-    Eigen::Vector3d dX21 = Xp[1] - Xp[0];
-    Eigen::Vector3d dX01 = X[0] - Xp[0];
-    double lxp1 = l[0].dot(xp[0]);
-
-    dX21 *= lxp1;
-
-    Eigen::Matrix<double, 3, 9> B;
-
-    Eigen::Matrix<double, 1, 9> b;
-    b << -dX01(0) * l[0].transpose(), -dX01(1) * l[0].transpose(), -dX01(2) * l[0].transpose();
-    B.row(0) = xp[0](0) * b;
-    B.row(1) = xp[0](1) * b;
-    B.row(2) = xp[0](2) * b;
-    B(0, 0) += dX21(0);
-    B(1, 1) += dX21(0);
-    B(2, 2) += dX21(0);
-    B(0, 3) += dX21(1);
-    B(1, 4) += dX21(1);
-    B(2, 5) += dX21(1);
-    B(0, 6) += dX21(2);
-    B(1, 7) += dX21(2);
-    B(2, 8) += dX21(2);
-
-    B.row(0) = xp[1](2) * B.row(0) - xp[1](0) * B.row(2);
-    B.row(1) = xp[1](2) * B.row(1) - xp[1](1) * B.row(2);
-    B.row(2) << V[0](0) * l[0].transpose(), V[0](1) * l[0].transpose(), V[0](2) * l[0].transpose();
-
-    Eigen::Matrix<double, 4, 8> solutions;
-    int n_sols = re3q3::re3q3_rotation(B, &solutions);
-
     output->clear();
-    for (int i = 0; i < n_sols; ++i) {
-        CameraPose pose;
-        pose.q = solutions.col(i);
+    output->reserve(2);
+    const Eigen::Vector3d n = l[0].normalized();
+    // Same centered differences as the E3Q3 solver, before its lxp1 scaling.
+    const Eigen::Vector3d dX21 = Xp[1] - Xp[0];
+    const double dX21_norm = dX21.norm();
+    const Eigen::Vector3d a = dX21 / dX21_norm;
+    const Eigen::Vector3d dX01 = X[0] - Xp[0];
+    // Incidence coefficients use the normalized line normal n.
+    const double lxp1 = n.dot(xp[0]), lxp2 = n.dot(xp[1]);
+    if (dX21_norm == 0.0 || V[0].squaredNorm() == 0.0)
+        return 0;
 
-        Eigen::Matrix3d R = pose.R();
-        double lambda = -l[0].dot(R * (X[0] - Xp[0])) / lxp1;
-
-        pose.t = lambda * xp[0] - R * Xp[0];
-        output->push_back(pose);
+    // In the paper's special frame, r is the first column and s the second
+    // row of R. Work in the original frames: r = R*a and s = R^T*n.
+    // Write s in V's perpendicular plane, and r in the span of the two rays.
+    // Incidence gives two linear constraints on the two depths and s.
+    const Eigen::Matrix<double, 3, 2> basis = perpendicular(V[0]);
+    Eigen::Matrix<double, 2, 4> A;
+    A << -lxp1, lxp2, -a.dot(basis.col(0)), -a.dot(basis.col(1)), lxp1, 0.0, dX01.dot(basis.col(0)) / dX21_norm,
+        dX01.dot(basis.col(1)) / dX21_norm;
+    // Pivot on the largest minor, so points on the image line do not force
+    // division by zero. The remaining two variables parameterize the kernel.
+    int p = 0, q = 1;
+    double det = 0.0;
+    for (int i = 0; i < 4; ++i) {
+        for (int j = i + 1; j < 4; ++j) {
+            const double minor = A(0, i) * A(1, j) - A(0, j) * A(1, i);
+            if (std::abs(minor) > std::abs(det)) {
+                det = minor;
+                p = i;
+                q = j;
+            }
+        }
     }
-
-    return n_sols;
+    if (det == 0.0)
+        return 0;
+    Eigen::Matrix<double, 4, 2> N = Eigen::Matrix<double, 4, 2>::Zero();
+    int col = 0;
+    for (int k = 0; k < 4; ++k) {
+        if (k == p || k == q)
+            continue;
+        N(k, col) = 1.0;
+        N(p, col) = (A(0, q) * A(1, k) - A(1, q) * A(0, k)) / det;
+        N(q, col) = (A(1, p) * A(0, k) - A(0, p) * A(1, k)) / det;
+        ++col;
+    }
+    const Eigen::Matrix<double, 3, 2> C = xp[1] * N.row(1) - xp[0] * N.row(0);
+    const Eigen::Matrix<double, 3, 2> S = basis * N.bottomRows<2>();
+    // Equal unit norms leave a homogeneous quadratic.
+    const Eigen::Matrix2d Q = C.transpose() * C - S.transpose() * S;
+    Eigen::Vector2d roots[2];
+    const int count = univariate::solve_quadratic_real(Q(0, 0), 2.0 * Q(0, 1), Q(1, 1), roots);
+    for (int i = 0; i < count; ++i) {
+        const double depth1 = N.row(0).dot(roots[i]);
+        const double depth2 = N.row(1).dot(roots[i]);
+        // Both depths share a positive scale and change sign together.
+        if (!std::isfinite(depth1) || !std::isfinite(depth2) || depth1 == 0.0 || depth2 == 0.0 ||
+            (depth1 > 0.0) != (depth2 > 0.0))
+            continue;
+        const double scale = 1.0 / (S * roots[i]).norm();
+        const double lambda = dX21_norm * scale * depth1;
+        if (!std::isfinite(lambda) || lambda == 0.0)
+            continue;
+        const Eigen::Vector3d s = scale * S * roots[i];
+        const Eigen::Vector3d r = (C * roots[i]).normalized();
+        const Eigen::Vector3d w = s.cross(a);
+        const double w2 = w.squaredNorm();
+        if (w2 == 0.0)
+            continue;
+        const Eigen::Vector3d z = n.cross(r);
+        const Eigen::Matrix3d F = r * a.transpose();
+        const Eigen::Matrix3d G = (n - r.dot(n) * r) * (s - a.dot(s) * a).transpose() / w2;
+        const Eigen::Matrix3d H = z * w.transpose() / w2;
+        const Eigen::Matrix3d R = (lambda > 0.0 ? 1.0 : -1.0) * (F + G) + H;
+        output->emplace_back(R, std::abs(lambda) * xp[0] - R * Xp[0]);
+    }
+    return output->size();
 }
 
 } // namespace poselib

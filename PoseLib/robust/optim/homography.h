@@ -30,6 +30,7 @@
 #define POSELIB_HOMOGRAPHY_H_
 
 #include "../../types.h"
+#include "PoseLib/misc/decompositions.h"
 #include "optim_utils.h"
 #include "refiner_base.h"
 
@@ -158,23 +159,6 @@ class PinholeHomographyRefiner : public RefinerBase<Eigen::Matrix3d, Accumulator
     const std::vector<Point2D> &x1;
     const std::vector<Point2D> &x2;
     const ResidualWeightVector &weights;
-
-  private:
-    Eigen::Matrix3d adjugate(const Eigen::Matrix3d &H) const {
-        Eigen::Matrix3d adj;
-        adj(0, 0) = H(1, 1) * H(2, 2) - H(1, 2) * H(2, 1);
-        adj(0, 1) = H(0, 2) * H(2, 1) - H(0, 1) * H(2, 2);
-        adj(0, 2) = H(0, 1) * H(1, 2) - H(0, 2) * H(1, 1);
-
-        adj(1, 0) = H(1, 2) * H(2, 0) - H(1, 0) * H(2, 2);
-        adj(1, 1) = H(0, 0) * H(2, 2) - H(0, 2) * H(2, 0);
-        adj(1, 2) = H(0, 2) * H(1, 0) - H(0, 0) * H(1, 2);
-
-        adj(2, 0) = H(1, 0) * H(2, 1) - H(1, 1) * H(2, 0);
-        adj(2, 1) = H(0, 1) * H(2, 0) - H(0, 0) * H(2, 1);
-        adj(2, 2) = H(0, 0) * H(1, 1) - H(0, 1) * H(1, 0);
-        return adj;
-    }
 };
 
 template <typename ResidualWeightVector = UniformWeightVector, typename Accumulator = NormalAccumulator>
