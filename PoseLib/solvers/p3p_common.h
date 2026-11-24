@@ -1,5 +1,8 @@
 #pragma once
 
+#include "PoseLib/misc/decompositions.h"
+
+#include <array>
 #include <cmath>
 
 namespace poselib {
@@ -28,19 +31,13 @@ bool inline root2real(double b, double c, double &r1, double &r2) {
     return true;
 }
 
-inline std::array<Eigen::Vector3d, 2> compute_pq(Eigen::Matrix3d C) {
-    std::array<Eigen::Vector3d, 2> pq;
-    Eigen::Matrix3d C_adj;
+// Choose which row and column to extract after factoring the degenerate conic.
+enum class ConicFactorStrategy { FIRST, MAX_ABS };
 
-    C_adj(0, 0) = C(1, 2) * C(2, 1) - C(1, 1) * C(2, 2);
-    C_adj(1, 1) = C(0, 2) * C(2, 0) - C(0, 0) * C(2, 2);
-    C_adj(2, 2) = C(0, 1) * C(1, 0) - C(0, 0) * C(1, 1);
-    C_adj(0, 1) = C(0, 1) * C(2, 2) - C(0, 2) * C(2, 1);
-    C_adj(0, 2) = C(0, 2) * C(1, 1) - C(0, 1) * C(1, 2);
-    C_adj(1, 0) = C_adj(0, 1);
-    C_adj(1, 2) = C(0, 0) * C(1, 2) - C(0, 2) * C(1, 0);
-    C_adj(2, 0) = C_adj(0, 2);
-    C_adj(2, 1) = C_adj(1, 2);
+inline std::array<Eigen::Vector3d, 2> compute_pq(Eigen::Matrix3d C,
+                                                 ConicFactorStrategy strategy = ConicFactorStrategy::FIRST) {
+    std::array<Eigen::Vector3d, 2> pq;
+    const Eigen::Matrix3d C_adj = -adjugate(C);
 
     Eigen::Vector3d v;
     if (C_adj(0, 0) > C_adj(1, 1)) {
@@ -62,8 +59,11 @@ inline std::array<Eigen::Vector3d, 2> compute_pq(Eigen::Matrix3d C) {
     C(2, 0) -= v(1);
     C(2, 1) += v(0);
 
-    pq[0] = C.col(0);
-    pq[1] = C.row(0);
+    Eigen::Index row = 0, col = 0;
+    if (strategy == ConicFactorStrategy::MAX_ABS)
+        C.cwiseAbs().maxCoeff(&row, &col);
+    pq[0] = C.col(col);
+    pq[1] = C.row(row);
 
     return pq;
 }

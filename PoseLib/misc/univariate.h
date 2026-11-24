@@ -39,6 +39,11 @@ void solve_quadratic(double a, double b, double c, std::complex<double> roots[2]
 /* Solves the quadratic equation a*x^2 + b*x + c = 0. Only returns real roots */
 int solve_quadratic_real(double a, double b, double c, double roots[2]);
 
+// Real projective roots [u:v] of a*u^2+b*u*v+c*v^2, including infinity [1:0].
+// Coefficients are scaled; repeated roots are returned once. The zero polynomial
+// and nonfinite coefficients return no isolated roots.
+int solve_quadratic_real(double a, double b, double c, Eigen::Vector2d roots[2]);
+
 /* Sign of component with largest magnitude */
 double sign2(const std::complex<double> z);
 

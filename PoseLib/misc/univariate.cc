@@ -29,7 +29,9 @@
 #include "univariate.h"
 
 #include <Eigen/Eigen>
+#include <algorithm>
 #include <complex>
+#include <type_traits>
 
 namespace poselib {
 namespace univariate {
@@ -44,20 +46,45 @@ void solve_quadratic(double a, double b, double c, std::complex<double> roots[2]
     roots[1] = c / (a * roots[0]);
 }
 
-/* Solves the quadratic equation a*x^2 + b*x + c = 0 */
-int solve_quadratic_real(double a, double b, double c, double roots[2]) {
-
-    double b2m4ac = b * b - 4 * a * c;
-    if (b2m4ac < 0)
+namespace {
+// The output type selects the affine or projective chart. Keep the legacy
+// affine arithmetic for existing callers, including its root multiplicities.
+template <typename Root> int quadratic_real(double a, double b, double c, Root roots[2]) {
+    if constexpr (std::is_same_v<Root, Eigen::Vector2d>) {
+        if (!std::isfinite(a) || !std::isfinite(b) || !std::isfinite(c))
+            return 0;
+        const double scale = std::max({std::abs(a), std::abs(b), std::abs(c)});
+        if (!(scale > 0.0) || !std::isfinite(scale))
+            return 0;
+        a /= scale;
+        b /= scale;
+        c /= scale;
+    }
+    const double disc = b * b - 4 * a * c;
+    if (disc < 0)
         return 0;
+    const double sq = std::sqrt(disc);
+    if constexpr (std::is_same_v<Root, double>) {
+        roots[0] = (b > 0) ? (2 * c) / (-b - sq) : (2 * c) / (-b + sq);
+        roots[1] = c / (a * roots[0]);
+        return 2;
+    } else {
+        const double q = -0.5 * (b + std::copysign(sq, b));
+        if (q == 0.0) {
+            roots[0] = a == 0.0 ? Eigen::Vector2d(1.0, 0.0) : Eigen::Vector2d(0.0, 1.0);
+            return 1;
+        }
+        roots[0] = Eigen::Vector2d(q, a).normalized();
+        roots[1] = Eigen::Vector2d(c, q).normalized();
+        return disc == 0.0 ? 1 : 2;
+    }
+}
+} // namespace
 
-    double sq = std::sqrt(b2m4ac);
+int solve_quadratic_real(double a, double b, double c, double roots[2]) { return quadratic_real(a, b, c, roots); }
 
-    // Choose sign to avoid cancellations
-    roots[0] = (b > 0) ? (2 * c) / (-b - sq) : (2 * c) / (-b + sq);
-    roots[1] = c / (a * roots[0]);
-
-    return 2;
+int solve_quadratic_real(double a, double b, double c, Eigen::Vector2d roots[2]) {
+    return quadratic_real(a, b, c, roots);
 }
 
 /* Sign of component with largest magnitude */
